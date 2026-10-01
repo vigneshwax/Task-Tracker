@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { HRTask, TaskPriority, TaskStatus, TaskFilterState } from '../types/hrTask';
-import { formatDateFriendly, isDateOverdue, isDateToday, getTodayDateString } from '../utils/storage';
+import { formatDateFriendly, formatTimeCompact, parseTimeParts, timeTo24Hour, isDateOverdue, isDateToday, getTodayDateString } from '../utils/storage';
 import { getCategoryStyles } from '../utils/categories';
 import { 
   Search, 
@@ -306,6 +306,12 @@ export const TaskTable: React.FC<TaskTableProps> = ({
         const pOrder: Record<TaskPriority, number> = { High: 3, Medium: 2, Low: 1 };
         valA = pOrder[a.priority];
         valB = pOrder[b.priority];
+      }
+
+      // Time chronological sort
+      if (sortField === 'time') {
+        valA = timeTo24Hour(a.time || '');
+        valB = timeTo24Hour(b.time || '');
       }
 
       if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
@@ -1148,8 +1154,32 @@ export const TaskTable: React.FC<TaskTableProps> = ({
                     </td>
 
                     {/* Time */}
-                    <td className="px-2 py-3 whitespace-nowrap font-mono-numbers text-slate-500 dark:text-slate-400 text-[11px]">
-                      {task.time || '—'}
+                    <td className="px-3 py-3 whitespace-nowrap font-mono-numbers text-xs">
+                      {task.time ? (() => {
+                        const parsed = parseTimeParts(task.time);
+                        const isAm = parsed.ampm === 'AM';
+                        return (
+                          <span className={`inline-flex items-center gap-1.5 font-medium px-2 py-0.5 rounded-md border shadow-2xs transition-all ${
+                            isAm
+                              ? 'bg-amber-50/90 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/60 text-slate-800 dark:text-slate-200'
+                              : 'bg-indigo-50/90 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800/60 text-slate-800 dark:text-slate-200'
+                          }`}>
+                            <Clock className={`w-3.5 h-3.5 shrink-0 ${isAm ? 'text-amber-500 dark:text-amber-400' : 'text-indigo-500 dark:text-indigo-400'}`} />
+                            <span className="font-semibold text-slate-900 dark:text-white font-mono-numbers tracking-tight">
+                              {parsed.timeOnly}
+                            </span>
+                            <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded uppercase tracking-wider font-sans shadow-2xs ${
+                              isAm 
+                                ? 'bg-amber-200/90 dark:bg-amber-800/70 text-amber-950 dark:text-amber-100' 
+                                : 'bg-indigo-200/90 dark:bg-indigo-800/70 text-indigo-950 dark:text-indigo-100'
+                            }`}>
+                              {parsed.ampm}
+                            </span>
+                          </span>
+                        );
+                      })() : (
+                        <span className="text-slate-400 text-xs">—</span>
+                      )}
                     </td>
 
                     {/* Task / Activity + Notes snippet */}

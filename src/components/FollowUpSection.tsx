@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { HRTask } from '../types/hrTask';
-import { isDateToday, isDateOverdue, formatDateFriendly, getTodayDateString } from '../utils/storage';
+import { isDateToday, isDateOverdue, formatDateFriendly, formatTimeCompact, getTodayDateString } from '../utils/storage';
 import { getCategoryStyles } from '../utils/categories';
 import { BellRing, Calendar, CheckCircle2, ChevronRight, Clock, AlertCircle, X } from 'lucide-react';
 
@@ -149,7 +149,7 @@ export const FollowUpSection: React.FC<FollowUpSectionProps> = ({
                     <div className="flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400 mt-1">
                       <span className="flex items-center gap-1">
                         <Clock className="w-3 h-3 text-slate-400" />
-                        <span className="font-mono-numbers">{task.time}</span>
+                        <span className="font-mono-numbers">{formatTimeCompact(task.time)}</span>
                       </span>
                       <span>·</span>
                       <span className="flex items-center gap-1">

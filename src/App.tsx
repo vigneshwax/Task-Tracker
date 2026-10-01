@@ -8,7 +8,9 @@ import {
   getTodayDateString,
   isDateToday,
   isDateOverdue,
-  getInitialSampleTasks
+  getInitialSampleTasks,
+  formatTimeCompact,
+  parseTimeParts
 } from './utils/storage';
 import { getStoredCategories, saveStoredCategories } from './utils/categories';
 import { downloadExcelTemplate } from './utils/excel';
@@ -148,6 +150,22 @@ export default function App() {
     saveTasksToStorage(newTasks);
   }, []);
 
+  // Ensure any existing tasks always have proper AM/PM formatted times
+  useEffect(() => {
+    let hasUnformatted = false;
+    const sanitized = tasks.map(t => {
+      const parsed = parseTimeParts(t.time);
+      if (t.time !== parsed.timeFormatted) {
+        hasUnformatted = true;
+        return { ...t, time: parsed.timeFormatted };
+      }
+      return t;
+    });
+    if (hasUnformatted) {
+      updateTasks(sanitized);
+    }
+  }, []);
+
   // Add custom category
   const handleAddCustomCategory = useCallback((catName: string) => {
     if (!catName || categories.includes(catName)) return;
@@ -263,7 +281,7 @@ export default function App() {
         const isNoLongerCompleted = field === 'status' && value !== 'Completed';
         return {
           ...t,
-          [field]: value,
+          [field]: field === 'time' && value ? formatTimeCompact(value) : value,
           completedDate: isNowCompleted 
             ? (t.completedDate || today) 
             : isNoLongerCompleted 

@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { HRTask, TaskStatus, ViewMode } from '../types/hrTask';
-import { formatDateFriendly, isDateToday, isDateOverdue } from '../utils/storage';
+import { formatDateFriendly, formatTimeCompact, isDateToday, isDateOverdue } from '../utils/storage';
 import { getCategoryStyles } from '../utils/categories';
 import { 
   Plus, 
@@ -384,7 +384,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           {task.time && (
                             <>
                               <span>·</span>
-                              <span className="font-mono-numbers">{task.time}</span>
+                              <span className="font-mono-numbers">{formatTimeCompact(task.time)}</span>
                             </>
                           )}
                           {task.followUpDate && (

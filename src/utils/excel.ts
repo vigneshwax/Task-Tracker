@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 import { HRTask, ExcelColumnMapping, TaskPriority, TaskStatus } from '../types/hrTask';
-import { getTodayDateString } from './storage';
+import { getTodayDateString, formatTimeCompact } from './storage';
 
 export const EXCEL_STANDARD_COLUMNS = [
   'Date',
@@ -332,28 +332,12 @@ export function normalizeDate(val: any): string {
 }
 
 /**
- * Normalizes Time format (supports 10.40 AM, 10:40 AM, 14:00, etc.)
+ * Normalizes Time format to always output AM/PM (supports 10.40 AM, 10:40 AM, 14:00, etc.)
  */
 export function normalizeTime(val: any): string {
   if (val === undefined || val === null || val === '') return '09:00 AM';
-  const str = String(val).trim();
-  // Check format like "10.40 AM" or "02.00 PM" (dot separator)
-  const dotTimeMatch = str.match(/^(\d{1,2})\.(\d{2})(?:\s*([AaPp][Mm]))?$/);
-  if (dotTimeMatch) {
-    const hh = dotTimeMatch[1].padStart(2, '0');
-    const mm = dotTimeMatch[2];
-    const ampm = dotTimeMatch[3] ? dotTimeMatch[3].toUpperCase() : '';
-    return ampm ? `${hh}:${mm} ${ampm}` : `${hh}:${mm}`;
-  }
-  // Check format like "10:40 AM" or "10:40" (colon separator)
-  const colonTimeMatch = str.match(/^(\d{1,2}):(\d{2})(?:\s*([AaPp][Mm]))?$/);
-  if (colonTimeMatch) {
-    const hh = colonTimeMatch[1].padStart(2, '0');
-    const mm = colonTimeMatch[2];
-    const ampm = colonTimeMatch[3] ? colonTimeMatch[3].toUpperCase() : '';
-    return ampm ? `${hh}:${mm} ${ampm}` : `${hh}:${mm}`;
-  }
-  return str;
+  const formatted = formatTimeCompact(String(val));
+  return formatted === '—' ? '09:00 AM' : formatted;
 }
 
 /**
@@ -461,7 +445,7 @@ export function exportTasksToExcel(
 ): void {
   const exportData = tasks.map(t => ({
     'Date': t.date,
-    'Time': t.time,
+    'Time': formatTimeCompact(t.time),
     'Task / Activity': t.title,
     'Description': t.description || '',
     'Category': t.category,

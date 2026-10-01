@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { HRTask } from '../types/hrTask';
-import { getTodayDateString, formatDateFriendly } from '../utils/storage';
+import { getTodayDateString, formatDateFriendly, formatTimeCompact } from '../utils/storage';
 import { getCategoryStyles } from '../utils/categories';
 import { 
   ChevronLeft, 
@@ -241,7 +241,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                               : `${catStyle.pillBg} ${catStyle.pillText} ${catStyle.accentBorder}`
                           }`}
                         >
-                          <span className="font-mono-numbers text-[9px] shrink-0 text-slate-400">{task.time}</span>
+                          <span className="font-mono-numbers text-[9px] shrink-0 text-slate-400">{formatTimeCompact(task.time)}</span>
                           <span className="truncate">{task.title}</span>
                         </div>
                       );
@@ -328,7 +328,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         className="p-2 bg-white rounded-lg border border-slate-200 shadow-2xs hover:shadow-xs transition-shadow cursor-pointer text-xs"
                       >
                         <div className="flex items-center justify-between text-[10px] text-slate-500 mb-1">
-                          <span className="font-mono-numbers">{task.time}</span>
+                          <span className="font-mono-numbers">{formatTimeCompact(task.time)}</span>
                           <span className={`px-1 rounded text-[9px] ${catStyle.pillBg} ${catStyle.pillText}`}>
                             {task.category}
                           </span>
@@ -386,7 +386,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     >
                       <div className="flex items-start gap-3">
                         <span className="font-mono-numbers text-xs font-semibold text-slate-700 bg-white px-2 py-1 rounded border border-slate-200">
-                          {task.time}
+                          {formatTimeCompact(task.time)}
                         </span>
                         <div>
                           <h4 className={`text-xs font-semibold text-slate-900 ${task.status === 'Completed' ? 'line-through text-slate-400' : ''}`}>

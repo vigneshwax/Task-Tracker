@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { HRTask, TaskPriority, TaskStatus } from '../types/hrTask';
-import { getTodayDateString } from '../utils/storage';
+import { getTodayDateString, formatTimeCompact, timeTo24Hour } from '../utils/storage';
 import { 
   X, 
   Calendar, 
@@ -48,7 +48,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setTitle(taskToEdit.title);
       setDescription(taskToEdit.description || '');
       setDate(taskToEdit.date);
-      setTime(taskToEdit.time || '');
+      setTime(taskToEdit.time ? timeTo24Hour(taskToEdit.time) : '');
       setCategory(taskToEdit.category);
       setPriority(taskToEdit.priority);
       setStatus(taskToEdit.status);
@@ -87,7 +87,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       title: title.trim(),
       description: description.trim(),
       date,
-      time: time.trim(),
+      time: time.trim() ? formatTimeCompact(time.trim()) : '',
       category,
       priority,
       status,
@@ -189,10 +189,17 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Time</span>
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Time</span>
+                  </label>
+                  {time && (
+                    <span className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 font-mono-numbers bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.5 rounded border border-indigo-200/60 dark:border-indigo-800/60">
+                      {formatTimeCompact(time)}
+                    </span>
+                  )}
+                </div>
                 <input
                   type="time"
                   value={time}

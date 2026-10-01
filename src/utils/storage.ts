@@ -26,29 +26,127 @@ export function formatDateCompact(dateStr: string): string {
   }
 }
 
-export function formatTimeCompact(timeStr: string): string {
-  if (!timeStr) return '—';
-  try {
-    const trimmed = timeStr.trim();
-    // If already has AM/PM
-    if (/am|pm/i.test(trimmed)) {
-      return trimmed.toUpperCase();
-    }
-    // If HH:mm format
-    const match = trimmed.match(/^(\d{1,2}):(\d{2})$/);
-    if (match) {
-      let hours = parseInt(match[1], 10);
-      const minutes = match[2];
-      const ampm = hours >= 12 ? 'PM' : 'AM';
-      hours = hours % 12;
-      hours = hours ? hours : 12; // 0 hour is 12 AM
-      const hoursStr = String(hours).padStart(2, '0');
-      return `${hoursStr}:${minutes} ${ampm}`;
-    }
-    return trimmed;
-  } catch {
-    return timeStr;
+export interface ParsedTimeResult {
+  timeFormatted: string; // e.g. "10:40 AM"
+  timeOnly: string;      // e.g. "10:40"
+  ampm: 'AM' | 'PM';     // "AM" or "PM"
+}
+
+export function parseTimeParts(val: any): ParsedTimeResult {
+  if (val === undefined || val === null || val === '') {
+    return { timeFormatted: '09:00 AM', timeOnly: '09:00', ampm: 'AM' };
   }
+
+  // Handle Excel numeric serial fraction (e.g. 0.444444 = 10:40 AM, 0.583333 = 02:00 PM)
+  if (typeof val === 'number' || (!isNaN(Number(val)) && Number(val) > 0 && Number(val) < 1 && !String(val).includes(':'))) {
+    const num = Number(val);
+    const totalMinutes = Math.round(num * 24 * 60);
+    let h24 = Math.floor(totalMinutes / 60) % 24;
+    const m = totalMinutes % 60;
+    const ampm: 'AM' | 'PM' = h24 >= 12 ? 'PM' : 'AM';
+    let h12 = h24 % 12;
+    if (h12 === 0) h12 = 12;
+    const timeOnly = `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    return { timeFormatted: `${timeOnly} ${ampm}`, timeOnly, ampm };
+  }
+
+  const raw = String(val).trim();
+  if (!raw || raw === '—') {
+    return { timeFormatted: '—', timeOnly: '—', ampm: 'AM' };
+  }
+
+  // Normalize "A.M." / "P.M." / "am" / "pm" / "a.m." / "p.m."
+  let str = raw
+    .replace(/a\.m\./gi, 'AM')
+    .replace(/p\.m\./gi, 'PM')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Check if explicit AM or PM exists
+  const hasAm = /am/i.test(str);
+  const hasPm = /pm/i.test(str);
+
+  // Extract digits (supports "10.40 AM", "10:40 AM", "10.40", "14:00", "10:40:00", "9:30")
+  const digitsMatch = str.match(/^(\d{1,2})[.:](\d{2})(?::\d{2})?/);
+  if (digitsMatch) {
+    let hours = parseInt(digitsMatch[1], 10);
+    const minutes = digitsMatch[2];
+    let ampm: 'AM' | 'PM' = 'AM';
+
+    if (hasPm) {
+      ampm = 'PM';
+      if (hours === 0) hours = 12;
+      else if (hours > 12) hours = hours % 12;
+    } else if (hasAm) {
+      ampm = 'AM';
+      if (hours === 0) hours = 12;
+      else if (hours > 12) hours = hours % 12;
+    } else {
+      // 24-hour inference
+      if (hours >= 12) {
+        ampm = 'PM';
+        hours = hours % 12 || 12;
+      } else {
+        ampm = 'AM';
+        hours = hours % 12 || 12;
+      }
+    }
+
+    const timeOnly = `${String(hours).padStart(2, '0')}:${minutes}`;
+    return {
+      timeFormatted: `${timeOnly} ${ampm}`,
+      timeOnly,
+      ampm,
+    };
+  }
+
+  // Check if single hour e.g. "9 AM", "2 PM", "14", "9"
+  const singleHourMatch = str.match(/^(\d{1,2})/);
+  if (singleHourMatch) {
+    let hours = parseInt(singleHourMatch[1], 10);
+    let ampm: 'AM' | 'PM' = 'AM';
+    if (hasPm) {
+      ampm = 'PM';
+      if (hours === 0) hours = 12;
+      else if (hours > 12) hours = hours % 12;
+    } else if (hasAm) {
+      ampm = 'AM';
+      if (hours === 0) hours = 12;
+      else if (hours > 12) hours = hours % 12;
+    } else {
+      if (hours >= 12) {
+        ampm = 'PM';
+        hours = hours % 12 || 12;
+      } else {
+        ampm = 'AM';
+        hours = hours % 12 || 12;
+      }
+    }
+    const timeOnly = `${String(hours).padStart(2, '0')}:00`;
+    return {
+      timeFormatted: `${timeOnly} ${ampm}`,
+      timeOnly,
+      ampm,
+    };
+  }
+
+  return { timeFormatted: str, timeOnly: str, ampm: 'AM' };
+}
+
+export function formatTimeCompact(timeStr: string): string {
+  const parsed = parseTimeParts(timeStr);
+  return parsed.timeFormatted;
+}
+
+export function timeTo24Hour(timeStr: string): string {
+  if (!timeStr) return '';
+  const parsed = parseTimeParts(timeStr);
+  if (parsed.timeOnly === '—') return '';
+  const [hStr, mStr] = parsed.timeOnly.split(':');
+  let h = parseInt(hStr, 10);
+  if (parsed.ampm === 'PM' && h < 12) h += 12;
+  if (parsed.ampm === 'AM' && h === 12) h = 0;
+  return `${String(h).padStart(2, '0')}:${mStr || '00'}`;
 }
 
 export function formatDateFriendly(dateStr: string): string {
@@ -95,7 +193,7 @@ export function getInitialSampleTasks(): HRTask[] {
     {
       id: 'task-1',
       date: today,
-      time: '09:00',
+      time: '09:00 AM',
       title: 'Fabric Sourcing Manager – Resume screening & profile sharing',
       description: 'Shortlist top 5 profiles from LinkedIn Talent Hub; focus on supply chain & textile experience.',
       category: 'Resume Screening',
@@ -110,7 +208,7 @@ export function getInitialSampleTasks(): HRTask[] {
     {
       id: 'task-2',
       date: today,
-      time: '10:30',
+      time: '10:30 AM',
       title: 'Marketing Consultant – Technical round interview coordination',
       description: 'Coordinate panel availability for technical deep dive and case presentation.',
       category: 'Interview Coordination',
@@ -126,7 +224,7 @@ export function getInitialSampleTasks(): HRTask[] {
     {
       id: 'task-3',
       date: today,
-      time: '11:45',
+      time: '11:45 AM',
       title: 'BGV – Candidate document verification & police clearance check',
       description: 'Follow up on OnGrid portal for address confirmation and previous employer reference relief letter.',
       category: 'BGV',
@@ -141,7 +239,7 @@ export function getInitialSampleTasks(): HRTask[] {
     {
       id: 'task-4',
       date: today,
-      time: '14:00',
+      time: '02:00 PM',
       title: 'Candidate interview confirmations & prep note dispatch',
       category: 'Candidate Follow-up',
       priority: 'Medium',
@@ -156,7 +254,7 @@ export function getInitialSampleTasks(): HRTask[] {
     {
       id: 'task-5',
       date: today,
-      time: '16:00',
+      time: '04:00 PM',
       title: 'Recruitment tracker update & hiring manager pipeline briefing',
       category: 'Reporting',
       priority: 'Low',
@@ -170,7 +268,7 @@ export function getInitialSampleTasks(): HRTask[] {
     {
       id: 'task-6',
       date: yesterday,
-      time: '15:00',
+      time: '03:00 PM',
       title: 'Staff Software Engineer – Offer letter preparation & salary structuring',
       category: 'Offer / Joining',
       priority: 'High',
@@ -185,7 +283,7 @@ export function getInitialSampleTasks(): HRTask[] {
     {
       id: 'task-7-hist',
       date: twoDaysAgo,
-      time: '11:00',
+      time: '11:00 AM',
       title: 'HR Policy handbook revision & maternity leave clause compliance check',
       category: 'Policy & Compliance',
       priority: 'Medium',
@@ -200,7 +298,7 @@ export function getInitialSampleTasks(): HRTask[] {
     {
       id: 'task-8',
       date: tomorrow,
-      time: '09:30',
+      time: '09:30 AM',
       title: 'New hire onboarding session & IT equipment readiness review',
       category: 'HR Operations',
       priority: 'Medium',
@@ -214,7 +312,7 @@ export function getInitialSampleTasks(): HRTask[] {
     {
       id: 'task-9',
       date: nextWeek,
-      time: '14:30',
+      time: '02:30 PM',
       title: 'Monthly payroll inputs reconciliation & overtime audit',
       category: 'Payroll',
       priority: 'High',
@@ -242,6 +340,7 @@ export function loadTasksFromStorage(): HRTask[] {
         .filter(t => t.id !== 'task-7')
         .map(t => ({
           ...t,
+          time: formatTimeCompact(t.time || '09:00 AM'),
           assignedTo: 'Me',
           completedDate: t.status === 'Completed' ? (t.completedDate || t.date) : t.completedDate,
         }));
