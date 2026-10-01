@@ -376,6 +376,21 @@ export default function App() {
     showToast('Cleared completed tasks');
   }, [tasks, updateTasks, showToast]);
 
+  // Clear all tasks
+  const handlePromptClearAllTasks = useCallback(() => {
+    setConfirmDeleteModal({
+      isOpen: true,
+      title: 'Clear All Tasks',
+      message: `Are you sure you want to clear all ${tasks.length} tasks? This will completely empty your task list and reset local storage. This action cannot be undone.`,
+      action: () => {
+        updateTasks([]);
+        setSelectedTaskIds([]);
+        setConfirmDeleteModal(prev => ({ ...prev, isOpen: false }));
+        showToast('All tasks cleared successfully');
+      },
+    });
+  }, [tasks.length, updateTasks, showToast]);
+
   // Reset to initial demo data
   const handleResetDemoData = useCallback(() => {
     const initial = getInitialSampleTasks();
@@ -708,6 +723,7 @@ export default function App() {
             onRestoreBackup={handleRestoreBackup}
             onResetDemoData={handleResetDemoData}
             onClearCompletedTasks={handleClearCompletedTasks}
+            onClearAllTasks={handlePromptClearAllTasks}
             showToast={showToast}
           />
         )}

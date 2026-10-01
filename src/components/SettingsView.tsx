@@ -33,6 +33,7 @@ interface SettingsViewProps {
   onRestoreBackup: (tasks: HRTask[]) => void;
   onResetDemoData: () => void;
   onClearCompletedTasks: () => void;
+  onClearAllTasks: () => void;
   showToast: (msg: string) => void;
 }
 
@@ -48,6 +49,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onRestoreBackup,
   onResetDemoData,
   onClearCompletedTasks,
+  onClearAllTasks,
   showToast,
 }) => {
   const [activeTab, setActiveTab] = useState<'appearance' | 'profile' | 'categories' | 'data'>('appearance');
@@ -128,13 +130,32 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     <div className="space-y-6 max-w-5xl mx-auto animate-in fade-in duration-150">
       
       {/* Settings Header */}
-      <div>
-        <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-          Settings & Workstation Preferences
-        </h2>
-        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Customize your themes, personal profile, workflow defaults, and manage your task backups.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+            Settings & Workstation Preferences
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Customize your themes, personal profile, workflow defaults, and manage your task backups.
+          </p>
+        </div>
+
+        {/* Clear All Tasks Header Button */}
+        <button
+          type="button"
+          onClick={onClearAllTasks}
+          disabled={tasks.length === 0}
+          title="Clear all tasks from the tracker"
+          className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:text-white hover:bg-rose-600 dark:hover:bg-rose-600 border border-rose-200 dark:border-rose-900/80 hover:border-rose-600 dark:hover:border-rose-600 rounded-xl transition-all shadow-2xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+        >
+          <Trash2 className="w-4 h-4" />
+          <span>Clear All Tasks</span>
+          {tasks.length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 font-mono-numbers">
+              {tasks.length}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* Settings Navigation Tabs */}
@@ -518,6 +539,32 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   className="px-3 py-1.5 bg-white dark:bg-slate-800 border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 rounded-lg hover:bg-rose-50 font-medium cursor-pointer shrink-0"
                 >
                   Clear Completed
+                </button>
+              </div>
+
+              {/* Clear All Tasks */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/70 dark:bg-rose-950/30 text-xs">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="font-bold text-rose-900 dark:text-rose-200 text-sm">
+                      Clear All Tasks
+                    </p>
+                    <span className="text-[10px] font-bold text-rose-700 dark:text-rose-300 bg-rose-200/80 dark:bg-rose-900/60 px-2 py-0.2 rounded-full uppercase tracking-wider">
+                      Danger
+                    </span>
+                  </div>
+                  <p className="text-slate-600 dark:text-slate-400 text-[11px] mt-0.5">
+                    Permanently deletes all {tasks.length} tasks and resets local storage to give you a clean slate.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={onClearAllTasks}
+                  disabled={tasks.length === 0}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Clear All Tasks</span>
                 </button>
               </div>
 
