@@ -16,61 +16,148 @@ export const EXCEL_STANDARD_COLUMNS = [
 ];
 
 /**
- * Downloads a clean Excel template pre-populated with example HR tasks
+ * Exact sample Excel rows from the user's template spreadsheet
+ */
+export const USER_SAMPLE_EXCEL_ROWS: Record<string, any>[] = [
+  {
+    'Date': '2026-10-01',
+    'Time': '10.40 AM',
+    'Task / Activity': 'Accounts Candidate - K Govind Reddy',
+    'Description': '9063020840',
+    'Category': 'BGV',
+    'Priority': 'Low',
+    'Status': 'Pending',
+    'Assigned To': 'Me',
+    'Notes': '',
+    'Follow-up Date': '',
+  },
+  {
+    'Date': '2026-10-01',
+    'Time': '10.35 AM',
+    'Task / Activity': 'Pace Active Candidate',
+    'Description': '9791836166',
+    'Category': 'BGV',
+    'Priority': 'Medium',
+    'Status': 'Pending',
+    'Assigned To': 'Me',
+    'Notes': '',
+    'Follow-up Date': '',
+  },
+  {
+    'Date': '2026-10-01',
+    'Time': '11.00 AM',
+    'Task / Activity': 'Junior Merchandiser - Pushpa',
+    'Description': '',
+    'Category': 'Resume Share',
+    'Priority': 'High',
+    'Status': 'Pending',
+    'Assigned To': 'Me',
+    'Notes': '',
+    'Follow-up Date': '',
+  },
+  {
+    'Date': '2026-10-01',
+    'Time': '11.30 AM',
+    'Task / Activity': 'Merchandiser , AM Merch - Viji',
+    'Description': '',
+    'Category': 'Resume Share',
+    'Priority': 'High',
+    'Status': 'Pending',
+    'Assigned To': 'Me',
+    'Notes': '',
+    'Follow-up Date': '',
+  },
+  {
+    'Date': '2026-10-01',
+    'Time': '12.00 PM',
+    'Task / Activity': 'Purchase candidate',
+    'Description': '',
+    'Category': 'Resume Screening',
+    'Priority': 'High',
+    'Status': 'Pending',
+    'Assigned To': 'Me',
+    'Notes': '',
+    'Follow-up Date': '',
+  },
+  {
+    'Date': '2026-10-01',
+    'Time': '02.00 PM',
+    'Task / Activity': 'Intern Drop Mail - Suprana',
+    'Description': '',
+    'Category': 'Update',
+    'Priority': 'Medium',
+    'Status': 'Pending',
+    'Assigned To': 'Me',
+    'Notes': '',
+    'Follow-up Date': '',
+  },
+  {
+    'Date': '2026-10-01',
+    'Time': '03.00 PM',
+    'Task / Activity': 'System Admin',
+    'Description': '',
+    'Category': 'Negotiation',
+    'Priority': 'Medium',
+    'Status': 'Pending',
+    'Assigned To': 'Me',
+    'Notes': '',
+    'Follow-up Date': '',
+  },
+  {
+    'Date': '2026-10-01',
+    'Time': '04.00 PM',
+    'Task / Activity': 'Randsad Update',
+    'Description': '',
+    'Category': 'Follow-up',
+    'Priority': 'Medium',
+    'Status': 'Pending',
+    'Assigned To': 'Me',
+    'Notes': '',
+    'Follow-up Date': '',
+  },
+  {
+    'Date': '2026-10-01',
+    'Time': '01.30 AM',
+    'Task / Activity': 'Consultant Resume screen',
+    'Description': '',
+    'Category': 'Resume Screening',
+    'Priority': 'High',
+    'Status': 'Pending',
+    'Assigned To': 'Me',
+    'Notes': '',
+    'Follow-up Date': '',
+  },
+  {
+    'Date': '2026-10-02',
+    'Time': '10.30 AM',
+    'Task / Activity': 'Roshini - Offer',
+    'Description': '93844 71447',
+    'Category': 'Follow-up',
+    'Priority': 'High',
+    'Status': 'Pending',
+    'Assigned To': 'Me',
+    'Notes': '',
+    'Follow-up Date': '',
+  },
+];
+
+/**
+ * Downloads a clean Excel template pre-populated with the user's sample HR tasks
  */
 export function downloadExcelTemplate(): void {
-  const templateData = [
-    {
-      'Date': getTodayDateString(),
-      'Time': '09:00 AM',
-      'Task / Activity': 'Fabric Sourcing Manager – Resume screening & profile sharing',
-      'Description': 'Shortlist top 5 profiles from LinkedIn Talent Hub; focus on supply chain & textile experience.',
-      'Category': 'Resume Screening',
-      'Priority': 'High',
-      'Status': 'In Progress',
-      'Assigned To': 'Sarah Jenkins (Recruiter)',
-      'Notes': 'Hiring manager prefers candidates with international sourcing exposure.',
-      'Follow-up Date': getTodayDateString(),
-    },
-    {
-      'Date': getTodayDateString(),
-      'Time': '10:30 AM',
-      'Task / Activity': 'Marketing Consultant – Technical round interview coordination',
-      'Description': 'Coordinate panel availability for technical deep dive and case presentation.',
-      'Category': 'Interview Coordination',
-      'Priority': 'High',
-      'Status': 'Completed',
-      'Assigned To': 'Sarah Jenkins (Recruiter)',
-      'Notes': 'Google Meet link shared with Panelist Vikram and Candidate Anita. Calendar invites confirmed.',
-      'Follow-up Date': '',
-    },
-    {
-      'Date': getTodayDateString(),
-      'Time': '11:45 AM',
-      'Task / Activity': 'BGV – Candidate document verification & police clearance check',
-      'Description': 'Follow up on OnGrid portal for address confirmation and previous employer reference relief letter.',
-      'Category': 'BGV',
-      'Priority': 'Medium',
-      'Status': 'Pending',
-      'Assigned To': 'Alex Chen (HR Ops)',
-      'Notes': 'Awaiting passport copy and address verification from OnGrid partner portal.',
-      'Follow-up Date': getTodayDateString(),
-    }
-  ];
-
-  const ws = XLSX.utils.json_to_sheet(templateData, { header: EXCEL_STANDARD_COLUMNS });
+  const ws = XLSX.utils.json_to_sheet(USER_SAMPLE_EXCEL_ROWS, { header: EXCEL_STANDARD_COLUMNS });
   
   // Set nice column widths
   ws['!cols'] = [
     { wch: 14 }, // Date
     { wch: 12 }, // Time
-    { wch: 48 }, // Task / Activity
-    { wch: 50 }, // Description
-    { wch: 24 }, // Category
+    { wch: 42 }, // Task / Activity
+    { wch: 22 }, // Description (Phone / Details)
+    { wch: 22 }, // Category
     { wch: 12 }, // Priority
-    { wch: 14 }, // Status
-    { wch: 28 }, // Assigned To
-    { wch: 50 }, // Notes
+    { wch: 12 }, // Status
+    { wch: 16 }, // Assigned To
+    { wch: 30 }, // Notes
     { wch: 16 }, // Follow-up Date
   ];
 
@@ -79,22 +166,46 @@ export function downloadExcelTemplate(): void {
 
   // Add Instructions Sheet
   const instructions = [
-    { 'Field': 'Date', 'Format': 'YYYY-MM-DD or standard Excel date', 'Required': 'Yes' },
-    { 'Field': 'Time', 'Format': 'HH:mm AM/PM (e.g. 09:30 AM or 14:00)', 'Required': 'No' },
-    { 'Field': 'Task / Activity', 'Format': 'Text summary of the task', 'Required': 'Yes' },
-    { 'Field': 'Description', 'Format': 'Core description or details of the task', 'Required': 'No' },
-    { 'Field': 'Category', 'Format': 'Recruitment, Resume Screening, Interview Coordination, BGV, HR Operations, etc.', 'Required': 'No' },
+    { 'Field': 'Date', 'Format': 'YYYY-MM-DD (e.g. 2026-10-01)', 'Required': 'Yes' },
+    { 'Field': 'Time', 'Format': '10.40 AM or 10:40 AM', 'Required': 'No' },
+    { 'Field': 'Task / Activity', 'Format': 'Role or Activity title (e.g. Accounts Candidate - K Govind Reddy)', 'Required': 'Yes' },
+    { 'Field': 'Description', 'Format': 'Contact number, candidate details, or notes (e.g. 9063020840)', 'Required': 'No' },
+    { 'Field': 'Category', 'Format': 'BGV, Resume Share, Resume Screening, Update, Negotiation, Follow-up, etc.', 'Required': 'No' },
     { 'Field': 'Priority', 'Format': 'High, Medium, or Low', 'Required': 'No (Defaults to Medium)' },
     { 'Field': 'Status', 'Format': 'Pending, In Progress, or Completed', 'Required': 'No (Defaults to Pending)' },
-    { 'Field': 'Assigned To', 'Format': 'Team member or recruiter name', 'Required': 'No' },
-    { 'Field': 'Notes', 'Format': 'Free text notes, interview links, instructions', 'Required': 'No' },
-    { 'Field': 'Follow-up Date', 'Format': 'YYYY-MM-DD for tracking overdue/today follow-ups', 'Required': 'No' },
+    { 'Field': 'Assigned To', 'Format': 'Me or recruiter name', 'Required': 'No' },
+    { 'Field': 'Notes', 'Format': 'Free text comments or links', 'Required': 'No' },
+    { 'Field': 'Follow-up Date', 'Format': 'YYYY-MM-DD for tracking follow-ups', 'Required': 'No' },
   ];
   const wsGuide = XLSX.utils.json_to_sheet(instructions);
-  wsGuide['!cols'] = [{ wch: 20 }, { wch: 55 }, { wch: 15 }];
+  wsGuide['!cols'] = [{ wch: 20 }, { wch: 65 }, { wch: 15 }];
   XLSX.utils.book_append_sheet(wb, wsGuide, 'Guide & Instructions');
 
-  XLSX.writeFile(wb, 'HR_Daily_Task_Template.xlsx');
+  XLSX.writeFile(wb, 'My_Sample_HR_Tasks.xlsx');
+}
+
+/**
+ * Returns pre-configured parsed spreadsheet for the user's sample table
+ */
+export function getUserSampleParsedSpreadsheet(): ParsedSpreadsheet {
+  return {
+    fileName: 'My_Sample_Import_excel_file_table.xlsx',
+    sheetNames: ['HR Tasks'],
+    headers: [...EXCEL_STANDARD_COLUMNS],
+    rawRows: [...USER_SAMPLE_EXCEL_ROWS],
+    detectedMapping: {
+      date: 'Date',
+      time: 'Time',
+      title: 'Task / Activity',
+      description: 'Description',
+      category: 'Category',
+      priority: 'Priority',
+      status: 'Status',
+      assignedTo: 'Assigned To',
+      notes: 'Notes',
+      followUpDate: 'Follow-up Date',
+    },
+  };
 }
 
 export interface ParsedSpreadsheet {
@@ -221,6 +332,31 @@ export function normalizeDate(val: any): string {
 }
 
 /**
+ * Normalizes Time format (supports 10.40 AM, 10:40 AM, 14:00, etc.)
+ */
+export function normalizeTime(val: any): string {
+  if (val === undefined || val === null || val === '') return '09:00 AM';
+  const str = String(val).trim();
+  // Check format like "10.40 AM" or "02.00 PM" (dot separator)
+  const dotTimeMatch = str.match(/^(\d{1,2})\.(\d{2})(?:\s*([AaPp][Mm]))?$/);
+  if (dotTimeMatch) {
+    const hh = dotTimeMatch[1].padStart(2, '0');
+    const mm = dotTimeMatch[2];
+    const ampm = dotTimeMatch[3] ? dotTimeMatch[3].toUpperCase() : '';
+    return ampm ? `${hh}:${mm} ${ampm}` : `${hh}:${mm}`;
+  }
+  // Check format like "10:40 AM" or "10:40" (colon separator)
+  const colonTimeMatch = str.match(/^(\d{1,2}):(\d{2})(?:\s*([AaPp][Mm]))?$/);
+  if (colonTimeMatch) {
+    const hh = colonTimeMatch[1].padStart(2, '0');
+    const mm = colonTimeMatch[2];
+    const ampm = colonTimeMatch[3] ? colonTimeMatch[3].toUpperCase() : '';
+    return ampm ? `${hh}:${mm} ${ampm}` : `${hh}:${mm}`;
+  }
+  return str;
+}
+
+/**
  * Normalizes Priority
  */
 export function normalizePriority(val: any): TaskPriority {
@@ -258,12 +394,14 @@ export function convertRowsToTasks(
     if (!rawTitle) continue; // skip empty task rows
 
     const dateVal = mapping.date ? normalizeDate(row[mapping.date]) : getTodayDateString();
-    const timeVal = mapping.time ? String(row[mapping.time] || '').trim() : '09:00 AM';
-    const descVal = mapping.description ? String(row[mapping.description] || '').trim() : '';
-    const categoryVal = mapping.category ? String(row[mapping.category] || '').trim() || 'HR Operations' : 'HR Operations';
+    const timeVal = mapping.time ? normalizeTime(row[mapping.time]) : '09:00 AM';
+    const rawDesc = mapping.description ? row[mapping.description] : '';
+    const descVal = (rawDesc !== undefined && rawDesc !== null) ? String(rawDesc).trim() : '';
+    const rawCat = mapping.category ? String(row[mapping.category] || '').trim() : '';
+    const categoryVal = rawCat || 'HR Operations';
     const priorityVal = mapping.priority ? normalizePriority(row[mapping.priority]) : 'Medium';
     const statusVal = mapping.status ? normalizeStatus(row[mapping.status]) : 'Pending';
-    const assignedVal = mapping.assignedTo ? String(row[mapping.assignedTo] || '').trim() || 'Unassigned' : 'Unassigned';
+    const assignedVal = mapping.assignedTo ? String(row[mapping.assignedTo] || '').trim() || 'Me' : 'Me';
     const notesVal = mapping.notes ? String(row[mapping.notes] || '').trim() : '';
     const followUpVal = mapping.followUpDate && row[mapping.followUpDate] ? normalizeDate(row[mapping.followUpDate]) : '';
 

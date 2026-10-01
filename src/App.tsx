@@ -117,6 +117,7 @@ export default function App() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [showFollowUpBanner, setShowFollowUpBanner] = useState(false);
+  const [isTableFullScreen, setIsTableFullScreen] = useState(false);
 
   // Delete Confirm State
   const [confirmDeleteModal, setConfirmDeleteModal] = useState<{
@@ -486,41 +487,72 @@ export default function App() {
           />
         )}
 
-        {/* VIEW 1: Task List (Table with Left/Right split) */}
+        {/* VIEW 1: Task List (Full Width Table with Downside Focus & Scratchpad Cards) */}
         {viewMode === 'list' && (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-              
-              {/* Left Column: Task Table */}
-              <div className="lg:col-span-8 space-y-6">
-                <TaskTable
-                  tasks={tasks}
-                  onToggleComplete={handleToggleComplete}
-                  onUpdateTaskField={handleUpdateTaskField}
-                  onEditTask={(task) => {
-                    setTaskToEdit(task);
-                    setIsTaskModalOpen(true);
-                  }}
-                  onDuplicateTask={handleDuplicateTask}
-                  onRequestDeleteTask={handlePromptDeleteTask}
-                  onRequestBulkDelete={handlePromptBulkDelete}
-                  onBulkUpdateStatus={handleBulkUpdateStatus}
-                  categories={categories}
-                  filterState={filterState}
-                  onFilterChange={setFilterState}
-                  selectedTaskIds={selectedTaskIds}
-                  onToggleSelectTask={handleToggleSelectTask}
-                  onSelectAllVisible={handleSelectAllVisible}
-                  onClearSelection={handleClearSelection}
-                  onOpenAddTask={() => {
-                    setTaskToEdit(null);
-                    setIsTaskModalOpen(true);
-                  }}
-                />
-              </div>
+            
+            {/* Full Width Task Table (Excel Import Data) */}
+            <div className="w-full">
+              <TaskTable
+                tasks={tasks}
+                onToggleComplete={handleToggleComplete}
+                onUpdateTaskField={handleUpdateTaskField}
+                onEditTask={(task) => {
+                  setTaskToEdit(task);
+                  setIsTaskModalOpen(true);
+                }}
+                onDuplicateTask={handleDuplicateTask}
+                onRequestDeleteTask={handlePromptDeleteTask}
+                onRequestBulkDelete={handlePromptBulkDelete}
+                onBulkUpdateStatus={handleBulkUpdateStatus}
+                categories={categories}
+                filterState={filterState}
+                onFilterChange={setFilterState}
+                selectedTaskIds={selectedTaskIds}
+                onToggleSelectTask={handleToggleSelectTask}
+                onSelectAllVisible={handleSelectAllVisible}
+                onClearSelection={handleClearSelection}
+                onOpenAddTask={() => {
+                  setTaskToEdit(null);
+                  setIsTaskModalOpen(true);
+                }}
+                isFullScreen={isTableFullScreen}
+                onToggleFullScreen={() => setIsTableFullScreen(prev => !prev)}
+                downsideSlot={
+                  <DashboardSidebar
+                    tasks={tasks}
+                    onOpenEditTask={(task) => {
+                      setTaskToEdit(task);
+                      setIsTaskModalOpen(true);
+                    }}
+                    onQuickToggleComplete={handleToggleComplete}
+                    onOpenAddTask={() => {
+                      setTaskToEdit(null);
+                      setIsTaskModalOpen(true);
+                    }}
+                    onSelectView={setViewMode}
+                    dailyNote={dailyNote}
+                    onUpdateDailyNote={handleSaveDailyNote}
+                    layout="horizontal"
+                  />
+                }
+              />
+            </div>
 
-              {/* Right Column: Daily Focus, Follow-ups, Scratchpad */}
-              <div className="lg:col-span-4">
+            {/* Down Side: Today's Focus, Urgent Follow-ups, and Quick Scratchpad Cards */}
+            {!isTableFullScreen && (
+              <div className="pt-2">
+                <div className="flex items-center justify-between mb-3 px-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Daily Focus, Follow-ups & Scratchpad
+                    </h3>
+                    <span className="text-[11px] text-slate-400 dark:text-slate-500 font-mono-numbers">
+                      · Downside Hub
+                    </span>
+                  </div>
+                </div>
+
                 <DashboardSidebar
                   tasks={tasks}
                   onOpenEditTask={(task) => {
@@ -535,14 +567,17 @@ export default function App() {
                   onSelectView={setViewMode}
                   dailyNote={dailyNote}
                   onUpdateDailyNote={handleSaveDailyNote}
+                  layout="horizontal"
                 />
               </div>
-            </div>
+            )}
 
             {/* Bottom Dashboard Section: Task Status & Productivity Overview */}
-            <div className="pt-4 border-t border-slate-200/80 dark:border-slate-800">
-              <AnalyticsView tasks={tasks} />
-            </div>
+            {!isTableFullScreen && (
+              <div className="pt-4 border-t border-slate-200/80 dark:border-slate-800">
+                <AnalyticsView tasks={tasks} />
+              </div>
+            )}
           </div>
         )}
 

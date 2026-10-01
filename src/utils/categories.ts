@@ -7,17 +7,19 @@ export interface CategoryConfig {
 }
 
 export const DEFAULT_HR_CATEGORIES: CategoryConfig[] = [
-  { name: 'Recruitment', color: '#6366f1', accentBorder: 'border-indigo-200', pillBg: 'bg-indigo-50', pillText: 'text-indigo-700' },
-  { name: 'Resume Screening', color: '#0ea5e9', accentBorder: 'border-sky-200', pillBg: 'bg-sky-50', pillText: 'text-sky-700' },
-  { name: 'Interview Coordination', color: '#8b5cf6', accentBorder: 'border-purple-200', pillBg: 'bg-purple-50', pillText: 'text-purple-700' },
-  { name: 'Candidate Follow-up', color: '#ec4899', accentBorder: 'border-pink-200', pillBg: 'bg-pink-50', pillText: 'text-pink-700' },
   { name: 'BGV', color: '#f59e0b', accentBorder: 'border-amber-200', pillBg: 'bg-amber-50', pillText: 'text-amber-700' },
+  { name: 'Resume Share', color: '#06b6d4', accentBorder: 'border-cyan-200', pillBg: 'bg-cyan-50', pillText: 'text-cyan-700' },
+  { name: 'Resume Screening', color: '#0ea5e9', accentBorder: 'border-sky-200', pillBg: 'bg-sky-50', pillText: 'text-sky-700' },
+  { name: 'Update', color: '#8b5cf6', accentBorder: 'border-purple-200', pillBg: 'bg-purple-50', pillText: 'text-purple-700' },
+  { name: 'Negotiation', color: '#f97316', accentBorder: 'border-orange-200', pillBg: 'bg-orange-50', pillText: 'text-orange-700' },
+  { name: 'Follow-up', color: '#ec4899', accentBorder: 'border-pink-200', pillBg: 'bg-pink-50', pillText: 'text-pink-700' },
+  { name: 'Interview Coordination', color: '#6366f1', accentBorder: 'border-indigo-200', pillBg: 'bg-indigo-50', pillText: 'text-indigo-700' },
   { name: 'Offer / Joining', color: '#10b981', accentBorder: 'border-emerald-200', pillBg: 'bg-emerald-50', pillText: 'text-emerald-700' },
   { name: 'HR Operations', color: '#64748b', accentBorder: 'border-slate-200', pillBg: 'bg-slate-50', pillText: 'text-slate-700' },
+  { name: 'Recruitment', color: '#3b82f6', accentBorder: 'border-blue-200', pillBg: 'bg-blue-50', pillText: 'text-blue-700' },
   { name: 'Payroll', color: '#059669', accentBorder: 'border-teal-200', pillBg: 'bg-teal-50', pillText: 'text-teal-700' },
-  { name: 'Employee Relations', color: '#d97706', accentBorder: 'border-orange-200', pillBg: 'bg-orange-50', pillText: 'text-orange-700' },
-  { name: 'Documentation', color: '#3b82f6', accentBorder: 'border-blue-200', pillBg: 'bg-blue-50', pillText: 'text-blue-700' },
   { name: 'Reporting', color: '#475569', accentBorder: 'border-zinc-200', pillBg: 'bg-zinc-50', pillText: 'text-zinc-700' },
+  { name: 'Policy & Compliance', color: '#0d9488', accentBorder: 'border-teal-200', pillBg: 'bg-teal-50', pillText: 'text-teal-700' },
   { name: 'Other', color: '#71717a', accentBorder: 'border-neutral-200', pillBg: 'bg-neutral-50', pillText: 'text-neutral-700' },
 ];
 
@@ -29,7 +31,9 @@ export function getStoredCategories(): string[] {
     if (!raw) return DEFAULT_HR_CATEGORIES.map(c => c.name);
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
+      // Merge with default categories to guarantee all standard HR workflows are available
+      const defaults = DEFAULT_HR_CATEGORIES.map(c => c.name);
+      return Array.from(new Set([...defaults, ...parsed]));
     }
   } catch (e) {
     console.error('Failed to load categories', e);

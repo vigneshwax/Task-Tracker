@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { HRTask, TaskPriority, TaskStatus, TaskFilterState } from '../types/hrTask';
 import { formatDateFriendly, isDateOverdue, isDateToday, getTodayDateString } from '../utils/storage';
 import { getCategoryStyles } from '../utils/categories';
@@ -24,7 +24,9 @@ import {
   ChevronRight,
   ChevronLeft,
   Circle,
-  History
+  History,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 
 interface TaskTableProps {
@@ -44,6 +46,9 @@ interface TaskTableProps {
   onSelectAllVisible: (taskIds: string[]) => void;
   onClearSelection: () => void;
   onOpenAddTask: () => void;
+  isFullScreen?: boolean;
+  onToggleFullScreen?: () => void;
+  downsideSlot?: React.ReactNode;
 }
 
 type SortField = 'date' | 'time' | 'title' | 'category' | 'priority' | 'status' | 'followUpDate';
@@ -66,12 +71,34 @@ export const TaskTable: React.FC<TaskTableProps> = ({
   onSelectAllVisible,
   onClearSelection,
   onOpenAddTask,
+  isFullScreen = false,
+  onToggleFullScreen,
+  downsideSlot,
 }) => {
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [openStatusMenuId, setOpenStatusMenuId] = useState<string | null>(null);
   const [showDatePickerPopover, setShowDatePickerPopover] = useState(false);
+
+  // Keyboard shortcut listener: 'F' toggles fullscreen, 'Esc' exits
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+      }
+      if ((e.key === 'f' || e.key === 'F') && onToggleFullScreen) {
+        e.preventDefault();
+        onToggleFullScreen();
+      } else if (e.key === 'Escape' && isFullScreen && onToggleFullScreen) {
+        e.preventDefault();
+        onToggleFullScreen();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullScreen, onToggleFullScreen]);
 
   // Handle sorting toggles
   const handleSort = (field: SortField) => {
@@ -319,7 +346,7 @@ export const TaskTable: React.FC<TaskTableProps> = ({
     }
   };
 
-  return (
+  const tableCard = (
     <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs overflow-hidden">
       {/* Search & Filter Toolbar */}
       <div className="p-4 border-b border-slate-100 dark:border-slate-800 space-y-3">
@@ -726,6 +753,31 @@ export const TaskTable: React.FC<TaskTableProps> = ({
               <SlidersHorizontal className="w-3.5 h-3.5" />
               <span>Filters</span>
             </button>
+
+            {onToggleFullScreen && (
+              <button
+                type="button"
+                onClick={onToggleFullScreen}
+                title={isFullScreen ? "Exit Full Screen (Esc)" : "Full Screen Table Mode (F)"}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all cursor-pointer ${
+                  isFullScreen
+                    ? 'border-indigo-600 bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs'
+                    : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-300'
+                }`}
+              >
+                {isFullScreen ? (
+                  <>
+                    <Minimize2 className="w-3.5 h-3.5" />
+                    <span>Exit Full Screen</span>
+                  </>
+                ) : (
+                  <>
+                    <Maximize2 className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>Full Screen</span>
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </div>
 
@@ -1340,4 +1392,58 @@ export const TaskTable: React.FC<TaskTableProps> = ({
       </div>
     </div>
   );
+
+  if (isFullScreen) {
+    return (
+      <div className="fixed inset-0 z-50 bg-slate-100/95 dark:bg-slate-950/95 backdrop-blur-md overflow-y-auto p-4 sm:p-6 lg:p-8 animate-in fade-in duration-200">
+        <div className="max-w-7xl mx-auto space-y-6">
+          {/* Full Screen Top Navigation Banner */}
+          <div className="flex items-center justify-between bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 px-5 py-3.5 rounded-xl shadow-xs">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
+                <Maximize2 className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <span>HR Task Management & Excel Data Table</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+                    Full Screen Mode
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Full-width table view · Press <kbd className="px-1 py-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-[10px] font-mono shadow-2xs">Esc</kbd> or <kbd className="px-1 py-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-[10px] font-mono shadow-2xs">F</kbd> to exit
+                </p>
+              </div>
+            </div>
+            {onToggleFullScreen && (
+              <button
+                onClick={onToggleFullScreen}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
+              >
+                <Minimize2 className="w-3.5 h-3.5" />
+                <span>Exit Full Screen</span>
+              </button>
+            )}
+          </div>
+
+          {/* Table Card */}
+          {tableCard}
+
+          {/* Down Side in Full Screen */}
+          {downsideSlot && (
+            <div className="pt-2">
+              <div className="flex items-center gap-2 mb-3 px-1">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Down Side · Daily Focus & Controls
+                </h3>
+              </div>
+              {downsideSlot}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return tableCard;
 };
