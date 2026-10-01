@@ -1,0 +1,6 @@
+{
+  "name": "Daily HR Task Tracker",
+  "description": "Modern, beautiful HR Daily Task Management web application designed for HR professionals to plan, track, edit, and analyze daily work.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
