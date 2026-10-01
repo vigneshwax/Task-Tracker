@@ -28,6 +28,7 @@ import { DashboardSidebar } from './components/DashboardSidebar';
 import { DashboardView } from './components/DashboardView';
 import { SettingsView } from './components/SettingsView';
 import { TaskModal } from './components/TaskModal';
+import { TaskDetailModal } from './components/TaskDetailModal';
 import { ExcelImportModal } from './components/ExcelImportModal';
 import { ExcelExportModal } from './components/ExcelExportModal';
 import { ConfirmModal } from './components/ConfirmModal';
@@ -115,6 +116,12 @@ export default function App() {
   // Modals
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [taskToEdit, setTaskToEdit] = useState<HRTask | null>(null);
+  const [taskForDetail, setTaskForDetail] = useState<HRTask | null>(null);
+
+  const activeTaskForDetail = useMemo(() => {
+    if (!taskForDetail) return null;
+    return tasks.find(t => t.id === taskForDetail.id) || taskForDetail;
+  }, [taskForDetail, tasks]);
 
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -500,6 +507,7 @@ export default function App() {
               setTaskToEdit(task);
               setIsTaskModalOpen(true);
             }}
+            onViewTaskDetail={setTaskForDetail}
             userName={userProfile.name}
             userRole={userProfile.role}
           />
@@ -519,6 +527,7 @@ export default function App() {
                   setTaskToEdit(task);
                   setIsTaskModalOpen(true);
                 }}
+                onViewTaskDetail={setTaskForDetail}
                 onDuplicateTask={handleDuplicateTask}
                 onRequestDeleteTask={handlePromptDeleteTask}
                 onRequestBulkDelete={handlePromptBulkDelete}
@@ -715,6 +724,27 @@ export default function App() {
         taskToEdit={taskToEdit}
         categories={categories}
         onAddCustomCategory={handleAddCustomCategory}
+      />
+
+      {/* Big Task Detail Popup Modal */}
+      <TaskDetailModal
+        task={activeTaskForDetail}
+        isOpen={Boolean(taskForDetail)}
+        onClose={() => setTaskForDetail(null)}
+        onUpdateStatus={(taskId, newStatus) => {
+          handleUpdateTaskField(taskId, 'status', newStatus);
+        }}
+        onUpdateNotes={(taskId, newNotes) => {
+          handleUpdateTaskField(taskId, 'notes', newNotes);
+        }}
+        onEditTask={(task) => {
+          setTaskForDetail(null);
+          setTaskToEdit(task);
+          setIsTaskModalOpen(true);
+        }}
+        onDeleteTask={handlePromptDeleteTask}
+        onDuplicateTask={handleDuplicateTask}
+        onRescheduleFollowUp={handleRescheduleFollowUp}
       />
 
       {/* Excel Import Modal */}

@@ -30,6 +30,7 @@ interface DashboardViewProps {
   onSelectView: (view: ViewMode) => void;
   onUpdateTaskField: (taskId: string, field: keyof HRTask, value: any) => void;
   onEditTask: (task: HRTask) => void;
+  onViewTaskDetail?: (task: HRTask) => void;
   userName?: string;
   userRole?: string;
 }
@@ -41,6 +42,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onSelectView,
   onUpdateTaskField,
   onEditTask,
+  onViewTaskDetail,
   userName = 'HR Specialist',
   userRole = 'Talent Acquisition & HR Operations',
 }) => {
@@ -356,9 +358,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         {task.status === 'Pending' && <Circle className="w-4 h-4 text-slate-400" />}
                       </button>
 
-                      <div className="min-w-0">
+                      <div 
+                        onClick={() => onViewTaskDetail ? onViewTaskDetail(task) : onEditTask(task)}
+                        className="min-w-0 flex-1 cursor-pointer group/title"
+                        title="Click to view task details in big popup"
+                      >
                         <div className="flex items-center gap-2 flex-wrap">
-                          <p className={`text-sm font-semibold truncate ${
+                          <p className={`text-sm font-semibold truncate group-hover/title:text-indigo-600 dark:group-hover/title:text-indigo-400 transition-colors ${
                             isCompleted ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-slate-100'
                           }`}>
                             {task.title}

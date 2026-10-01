@@ -26,14 +26,17 @@ import {
   Circle,
   History,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Eye
 } from 'lucide-react';
+import { TaskDetailModal } from './TaskDetailModal';
 
 interface TaskTableProps {
   tasks: HRTask[];
   onToggleComplete: (task: HRTask) => void;
   onUpdateTaskField: (taskId: string, field: keyof HRTask, value: any) => void;
   onEditTask: (task: HRTask) => void;
+  onViewTaskDetail?: (task: HRTask) => void;
   onDuplicateTask: (task: HRTask) => void;
   onRequestDeleteTask: (task: HRTask) => void;
   onRequestBulkDelete: (taskIds: string[]) => void;
@@ -59,6 +62,7 @@ export const TaskTable: React.FC<TaskTableProps> = ({
   onToggleComplete,
   onUpdateTaskField,
   onEditTask,
+  onViewTaskDetail,
   onDuplicateTask,
   onRequestDeleteTask,
   onRequestBulkDelete,
@@ -75,6 +79,22 @@ export const TaskTable: React.FC<TaskTableProps> = ({
   onToggleFullScreen,
   downsideSlot,
 }) => {
+  const [selectedDetailTask, setSelectedDetailTask] = useState<HRTask | null>(null);
+
+  // Keep detail modal task up to date with tasks array
+  const activeDetailTask = useMemo(() => {
+    if (!selectedDetailTask) return null;
+    return tasks.find(t => t.id === selectedDetailTask.id) || selectedDetailTask;
+  }, [selectedDetailTask, tasks]);
+
+  const handleOpenDetail = (task: HRTask) => {
+    if (onViewTaskDetail) {
+      onViewTaskDetail(task);
+    } else {
+      setSelectedDetailTask(task);
+    }
+  };
+
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -1120,7 +1140,14 @@ export const TaskTable: React.FC<TaskTableProps> = ({
                 return (
                   <tr
                     key={task.id}
-                    className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors group ${
+                    onClick={(e) => {
+                      const target = e.target as HTMLElement;
+                      if (target.closest('button') || target.closest('input') || target.closest('select')) {
+                        return;
+                      }
+                      handleOpenDetail(task);
+                    }}
+                    className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors group cursor-pointer ${
                       isSelected ? 'bg-indigo-50/40 dark:bg-indigo-950/30' : ''
                     }`}
                   >
@@ -1296,13 +1323,27 @@ export const TaskTable: React.FC<TaskTableProps> = ({
                           )}
                         </div>
 
-                        <div className="min-w-0">
-                          <p className={`font-medium ${isCompleted ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-slate-100'}`}>
+                        <div 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenDetail(task);
+                          }}
+                          className="min-w-0 flex-1 cursor-pointer group/title"
+                          title="Click to view task details in big popup"
+                        >
+                          <p className={`font-semibold text-sm transition-colors group-hover/title:text-indigo-600 dark:group-hover/title:text-indigo-400 ${
+                            isCompleted ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-slate-100'
+                          }`}>
                             {task.title}
                           </p>
+                          {task.description && (
+                            <p className="text-xs text-slate-600 dark:text-slate-300 font-medium truncate max-w-md mt-0.5">
+                              {task.description}
+                            </p>
+                          )}
                           {task.notes && (
-                            <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-md mt-0.5">
-                              {task.notes}
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-md mt-0.5 italic">
+                              "{task.notes}"
                             </p>
                           )}
                         </div>
@@ -1377,6 +1418,18 @@ export const TaskTable: React.FC<TaskTableProps> = ({
                     <td className="px-3 py-3 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
                         <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenDetail(task);
+                          }}
+                          title="View task in big popup"
+                          className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded transition-colors cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+
+                        <button
                           onClick={() => onEditTask(task)}
                           title="Edit task"
                           className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors cursor-pointer"
@@ -1420,6 +1473,22 @@ export const TaskTable: React.FC<TaskTableProps> = ({
           <span>Pending: <strong className="text-slate-800 dark:text-slate-200 font-mono-numbers">{tasks.filter(t => t.status === 'Pending' || t.status === 'In Progress').length}</strong></span>
         </div>
       </div>
+
+      {/* Big Task Detail Popup Modal */}
+      <TaskDetailModal
+        task={activeDetailTask}
+        isOpen={Boolean(selectedDetailTask)}
+        onClose={() => setSelectedDetailTask(null)}
+        onUpdateStatus={(taskId, newStatus) => onUpdateTaskField(taskId, 'status', newStatus)}
+        onUpdateNotes={(taskId, newNotes) => onUpdateTaskField(taskId, 'notes', newNotes)}
+        onEditTask={(task) => {
+          setSelectedDetailTask(null);
+          onEditTask(task);
+        }}
+        onDeleteTask={onRequestDeleteTask}
+        onDuplicateTask={onDuplicateTask}
+        onRescheduleFollowUp={(taskId, newDate) => onUpdateTaskField(taskId, 'followUpDate', newDate)}
+      />
     </div>
   );
 
