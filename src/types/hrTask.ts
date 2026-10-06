@@ -18,7 +18,7 @@ export interface HRTask {
   updatedAt: number;
 }
 
-export type ViewMode = 'dashboard' | 'list' | 'kanban' | 'calendar' | 'analytics' | 'daily-note' | 'settings';
+export type ViewMode = 'dashboard' | 'list' | 'kanban' | 'calendar' | 'analytics' | 'daily-note' | 'notes' | 'settings';
 
 export interface UserProfileSettings {
   name: string;
@@ -72,3 +72,37 @@ export interface DailyNoteData {
   content: string;
   lastUpdated: string;
 }
+
+export type KeepNoteColor = 
+  | 'default'
+  | 'sand'
+  | 'peach'
+  | 'coral'
+  | 'mint'
+  | 'sage'
+  | 'fog'
+  | 'storm'
+  | 'dusk'
+  | 'blossom'
+  | 'clay';
+
+export interface KeepChecklistItem {
+  id: string;
+  text: string;
+  completed: boolean;
+}
+
+export interface KeepNote {
+  id: string;
+  title: string;
+  content: string;
+  isChecklist: boolean;
+  checklistItems: KeepChecklistItem[];
+  color: KeepNoteColor;
+  isPinned: boolean;
+  isArchived?: boolean;
+  tags: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+

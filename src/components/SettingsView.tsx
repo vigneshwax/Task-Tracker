@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ThemeMode } from '../utils/theme';
-import { TaskPriority, UserProfileSettings, HRTask } from '../types/hrTask';
+import { TaskPriority, UserProfileSettings, HRTask, KeepNote } from '../types/hrTask';
 import { 
   Sun, 
   Moon, 
@@ -18,7 +18,9 @@ import {
   Sparkles,
   Layers,
   CheckCircle2,
-  Clock
+  Clock,
+  FileSpreadsheet,
+  FileText
 } from 'lucide-react';
 
 interface SettingsViewProps {
@@ -34,6 +36,12 @@ interface SettingsViewProps {
   onResetDemoData: () => void;
   onClearCompletedTasks: () => void;
   onClearAllTasks: () => void;
+  autoExtractOnClose?: boolean;
+  onToggleAutoExtractOnClose?: () => void;
+  onCloseWebsite?: () => void;
+  keepNotes?: KeepNote[];
+  onRestoreKeepNotes?: (notes: KeepNote[]) => void;
+  onClearAllKeepNotes?: () => void;
   showToast: (msg: string) => void;
 }
 
@@ -50,6 +58,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onResetDemoData,
   onClearCompletedTasks,
   onClearAllTasks,
+  autoExtractOnClose = true,
+  onToggleAutoExtractOnClose,
+  onCloseWebsite,
+  keepNotes = [],
+  onRestoreKeepNotes,
+  onClearAllKeepNotes,
   showToast,
 }) => {
   const [activeTab, setActiveTab] = useState<'appearance' | 'profile' | 'categories' | 'data'>('appearance');
@@ -120,6 +134,51 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       } catch (err) {
         console.error('Failed to parse backup', err);
         showToast('Error reading backup JSON file');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  // Export Standalone Keep Notes Backup
+  const handleExportNotesBackup = () => {
+    const backupData = {
+      app: 'Google Keep Style Standalone Notes',
+      version: '1.0',
+      exportedAt: new Date().toISOString(),
+      notes: keepNotes,
+    };
+    const jsonStr = JSON.stringify(backupData, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `keep-notes-backup-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast(`Exported ${keepNotes.length} notes to standalone backup`);
+  };
+
+  // Import Standalone Keep Notes Backup
+  const handleImportNotesBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const parsed = JSON.parse(event.target?.result as string);
+        const list = Array.isArray(parsed) 
+          ? parsed 
+          : (parsed.notes && Array.isArray(parsed.notes) ? parsed.notes : null);
+        if (list && onRestoreKeepNotes) {
+          onRestoreKeepNotes(list);
+          showToast(`Successfully restored ${list.length} standalone notes`);
+        } else {
+          showToast('Invalid notes backup file structure');
+        }
+      } catch (err) {
+        showToast('Error reading notes backup JSON file');
       }
     };
     reader.readAsText(file);
@@ -518,6 +577,112 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
             </div>
 
+            {/* Standalone Google Keep Notes Backup */}
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+              <div className="mb-3">
+                <h4 className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <FileText className="w-4 h-4 text-amber-500" />
+                  <span>Google Keep Notes Backup (Standalone)</span>
+                </h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Your notes are stored completely separately from tasks. Export or restore your {keepNotes.length} notes independently anytime.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Notes Export Card */}
+                <div className="p-4 rounded-xl border border-amber-200/80 dark:border-amber-900/50 bg-amber-50/40 dark:bg-amber-950/20 space-y-3">
+                  <div className="flex items-center gap-2 text-slate-900 dark:text-white font-semibold text-xs">
+                    <Download className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                    <span>Export Notes (.json)</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Download all {keepNotes.length} standalone notes and checklists as a portable backup.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleExportNotesBackup}
+                    className="px-3.5 py-1.5 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors cursor-pointer"
+                  >
+                    Export Notes
+                  </button>
+                </div>
+
+                {/* Notes Restore Card */}
+                <div className="p-4 rounded-xl border border-amber-200/80 dark:border-amber-900/50 bg-amber-50/40 dark:bg-amber-950/20 space-y-3">
+                  <div className="flex items-center gap-2 text-slate-900 dark:text-white font-semibold text-xs">
+                    <Upload className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                    <span>Restore Notes (.json)</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Load standalone notes from a previously saved JSON backup file.
+                  </p>
+                  {onRestoreKeepNotes && (
+                    <label className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-800 rounded-lg hover:bg-amber-50 cursor-pointer">
+                      <span>Select Notes JSON</span>
+                      <input
+                        type="file"
+                        accept=".json"
+                        onChange={handleImportNotesBackup}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Auto Excel Extraction on Exit Setting */}
+            <div className="p-4 rounded-xl border border-emerald-200/90 dark:border-emerald-900/60 bg-emerald-50/50 dark:bg-emerald-950/20 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 shrink-0">
+                    <FileSpreadsheet className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
+                      Auto-Extract Excel on Close
+                    </h4>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                      Automatically downloads a complete updated Excel (.xlsx) spreadsheet whenever you click "Close Website" or close/leave the browser tab.
+                    </p>
+                  </div>
+                </div>
+
+                {onToggleAutoExtractOnClose && (
+                  <button
+                    type="button"
+                    onClick={onToggleAutoExtractOnClose}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
+                      autoExtractOnClose ? 'bg-emerald-600' : 'bg-slate-300 dark:bg-slate-700'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                        autoExtractOnClose ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                )}
+              </div>
+
+              {onCloseWebsite && (
+                <div className="pt-2 border-t border-emerald-200/60 dark:border-emerald-900/40 flex items-center justify-between flex-wrap gap-2">
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Need to exit right now?
+                  </span>
+                  <button
+                    type="button"
+                    onClick={onCloseWebsite}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-xs transition-colors cursor-pointer shadow-xs"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Extract Excel & Close Website</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
             {/* Danger Zone */}
             <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
               <h4 className="text-xs font-semibold text-rose-600 dark:text-rose-400 uppercase tracking-wider">
@@ -567,6 +732,33 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <span>Clear All Tasks</span>
                 </button>
               </div>
+
+              {/* Clear All Standalone Notes */}
+              {onClearAllKeepNotes && (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/40 dark:bg-amber-950/20 text-xs">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-slate-900 dark:text-slate-200">
+                        Clear Standalone Notes
+                      </p>
+                      <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-200/80 dark:bg-amber-900/60 px-2 py-0.2 rounded-full">
+                        Notes Only
+                      </span>
+                    </div>
+                    <p className="text-slate-500 dark:text-slate-400 text-[11px] mt-0.5">
+                      Deletes all {keepNotes.length} Google Keep style notes from local storage. Tasks remain unaffected.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onClearAllKeepNotes}
+                    disabled={keepNotes.length === 0}
+                    className="px-3.5 py-1.5 bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-900 text-rose-600 dark:text-rose-400 rounded-lg hover:bg-rose-50 font-medium cursor-pointer shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Clear Notes ({keepNotes.length})
+                  </button>
+                </div>
+              )}
 
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-xs">
                 <div>

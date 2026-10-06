@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { HRTask, DailyNoteData } from '../types/hrTask';
 import { isDateToday, formatDateFriendly } from '../utils/storage';
 import { getCategoryStyles } from '../utils/categories';
@@ -22,6 +22,7 @@ interface DailyNoteViewProps {
   onOpenAddTask: () => void;
   dailyNote: DailyNoteData;
   onSaveDailyNote: (note: DailyNoteData) => void;
+  initialFocusNotes?: boolean;
 }
 
 export const DailyNoteView: React.FC<DailyNoteViewProps> = ({
@@ -31,10 +32,19 @@ export const DailyNoteView: React.FC<DailyNoteViewProps> = ({
   onOpenAddTask,
   dailyNote,
   onSaveDailyNote,
+  initialFocusNotes = false,
 }) => {
   const [focusGoal, setFocusGoal] = useState(dailyNote.focusGoal);
   const [content, setContent] = useState(dailyNote.content);
   const [isSaved, setIsSaved] = useState(false);
+  const notesTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (initialFocusNotes && notesTextareaRef.current) {
+      notesTextareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      notesTextareaRef.current.focus();
+    }
+  }, [initialFocusNotes]);
 
   useEffect(() => {
     setFocusGoal(dailyNote.focusGoal);
@@ -293,6 +303,7 @@ export const DailyNoteView: React.FC<DailyNoteViewProps> = ({
         </div>
 
         <textarea
+          ref={notesTextareaRef}
           rows={7}
           value={content}
           onChange={(e) => {

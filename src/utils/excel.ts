@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 import { HRTask, ExcelColumnMapping, TaskPriority, TaskStatus } from '../types/hrTask';
-import { getTodayDateString, formatTimeCompact } from './storage';
+import { getTodayDateString, formatTimeCompact, parseTimeParts } from './storage';
 
 export const EXCEL_STANDARD_COLUMNS = [
   'Date',
@@ -239,8 +239,8 @@ export function detectColumnMapping(headers: string[]): ExcelColumnMapping {
   };
 
   return {
-    date: findHeader(['Date', 'Task Date', 'Scheduled Date', 'Due Date', 'Day']),
-    time: findHeader(['Time', 'Scheduled Time', 'Task Time', 'Hour', 'Slot']),
+    date: findHeader(['Date', 'Task Date', 'Scheduled Date', 'Due Date', 'Day', 'Activity Date']),
+    time: findHeader(['Time', 'Task Time', 'Scheduled Time', 'Activity Time', 'Start Time', 'Time Slot', 'Slot', 'Hour', 'Timing', 'Timings', 'When']),
     title: findHeader(['Task / Activity', 'Task', 'Activity', 'Title', 'Task Name', 'Work', 'Item']),
     description: findHeader(['Description', 'Task Details', 'Detail', 'Summary', 'Job Description', 'Task Description']),
     category: findHeader(['Category', 'Department', 'HR Category', 'Type', 'Area', 'Function']),
@@ -253,14 +253,14 @@ export function detectColumnMapping(headers: string[]): ExcelColumnMapping {
 }
 
 /**
- * Reads an uploaded Excel (.xlsx, .xls) or CSV file
+ * Reads an uploaded Excel (.xlsx, .xls) or CSV file with full fidelity for Time and Dates
  */
 export async function parseUploadedExcel(file: File): Promise<ParsedSpreadsheet> {
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, {
     cellDates: true,
-    cellText: false,
-    dateNF: 'yyyy-mm-dd'
+    cellNF: true,
+    cellText: true,
   });
 
   const firstSheetName = workbook.SheetNames[0] || '';
@@ -270,11 +270,16 @@ export async function parseUploadedExcel(file: File): Promise<ParsedSpreadsheet>
     throw new Error('No readable sheets found in the spreadsheet.');
   }
 
-  // Get raw JSON rows
-  const rawRows = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, {
+  // 1. Formatted strings (preserves cell.w e.g. "10.40 AM", "10:40 AM")
+  const formattedRows = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, {
     defval: '',
     raw: false,
-    dateNF: 'yyyy-mm-dd'
+  });
+
+  // 2. Typed raw rows (preserves Date objects, numbers)
+  const rawTypedRows = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, {
+    defval: '',
+    raw: true,
   });
 
   // Extract all unique headers across the sheet
@@ -287,13 +292,55 @@ export async function parseUploadedExcel(file: File): Promise<ParsedSpreadsheet>
     }
   }
 
-  // Also verify against row keys in case headers are merged or dynamic
-  rawRows.slice(0, 10).forEach(row => {
+  formattedRows.slice(0, 10).forEach(row => {
+    Object.keys(row).forEach(k => headersSet.add(k.trim()));
+  });
+  rawTypedRows.slice(0, 10).forEach(row => {
     Object.keys(row).forEach(k => headersSet.add(k.trim()));
   });
 
   const headers = Array.from(headersSet).filter(Boolean);
   const detectedMapping = detectColumnMapping(headers);
+
+  // Merge formatted & raw rows smartly to preserve exact times
+  const maxLen = Math.max(formattedRows.length, rawTypedRows.length);
+  const rawRows: Record<string, any>[] = [];
+
+  for (let i = 0; i < maxLen; i++) {
+    const fRow = formattedRows[i] || {};
+    const rRow = rawTypedRows[i] || {};
+    const merged: Record<string, any> = {};
+
+    const keys = Array.from(new Set([...Object.keys(fRow), ...Object.keys(rRow)]));
+    for (const key of keys) {
+      const fVal = fRow[key];
+      const rVal = rRow[key];
+
+      const normKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const isTimeField = normKey === 'time' || normKey.includes('time') || normKey.includes('hour') || normKey.includes('timing') || key === detectedMapping.time;
+
+      if (isTimeField) {
+        // Priority 1: If raw value is a Date instance, normalize it directly to extract hours & minutes
+        if (rVal instanceof Date && !isNaN(rVal.getTime())) {
+          merged[key] = normalizeTime(rVal);
+        } else if (typeof rVal === 'number' && rVal > 0) {
+          // Priority 2: Excel fractional time or hour
+          merged[key] = normalizeTime(rVal);
+        } else if (fVal !== undefined && fVal !== null && String(fVal).trim() !== '' && !/^\d{4}[-/]\d{2}[-/]\d{2}$/.test(String(fVal).trim())) {
+          // Priority 3: Formatted text string like "10.40 AM", "10:40 AM"
+          merged[key] = normalizeTime(fVal);
+        } else if (rVal !== undefined && rVal !== null && String(rVal).trim() !== '') {
+          merged[key] = normalizeTime(rVal);
+        } else {
+          merged[key] = normalizeTime(fVal);
+        }
+      } else {
+        // Non-time fields
+        merged[key] = (fVal !== undefined && fVal !== '') ? fVal : rVal;
+      }
+    }
+    rawRows.push(merged);
+  }
 
   return {
     fileName: file.name,
@@ -315,10 +362,34 @@ export function normalizeDate(val: any): string {
     const d = String(val.getDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
   }
+  // Excel numeric date serial
+  if (typeof val === 'number' && val > 20000 && val < 90000) {
+    const dateObj = new Date((val - 25569) * 86400 * 1000);
+    if (!isNaN(dateObj.getTime())) {
+      const y = dateObj.getUTCFullYear();
+      const m = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(dateObj.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+  }
   const str = String(val).trim();
   // Check if matches YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
     return str;
+  }
+  // Support DD/MM/YYYY or DD-MM-YYYY or MM/DD/YYYY
+  const partsMatch = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+  if (partsMatch) {
+    let p1 = parseInt(partsMatch[1], 10);
+    let p2 = parseInt(partsMatch[2], 10);
+    const y = partsMatch[3];
+    let d = p1;
+    let m = p2;
+    if (p1 <= 12 && p2 > 12) {
+      m = p1;
+      d = p2;
+    }
+    return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
   }
   // Try standard parse
   const parsed = new Date(str);
@@ -332,12 +403,12 @@ export function normalizeDate(val: any): string {
 }
 
 /**
- * Normalizes Time format to always output AM/PM (supports 10.40 AM, 10:40 AM, 14:00, etc.)
+ * Normalizes Time format to always output AM/PM (supports 10.40 AM, 10:40 AM, 14:00, Date objects, Excel numbers)
  */
 export function normalizeTime(val: any): string {
   if (val === undefined || val === null || val === '') return '09:00 AM';
-  const formatted = formatTimeCompact(String(val));
-  return formatted === '—' ? '09:00 AM' : formatted;
+  const parsed = parseTimeParts(val);
+  return (parsed.timeFormatted && parsed.timeFormatted !== '—') ? parsed.timeFormatted : '09:00 AM';
 }
 
 /**
@@ -479,4 +550,58 @@ export function exportTasksToExcel(
   const filename = `HR_Daily_Tasks_${sanitizedScope}_${dateTag}.${format}`;
 
   XLSX.writeFile(wb, filename, { bookType: format });
+}
+
+/**
+ * Automatically extracts and downloads an Excel file containing all tasks.
+ * Used before closing the page or when clicking "Close Website".
+ */
+export function autoExtractExcelOnExit(tasks: HRTask[]): boolean {
+  try {
+    const dateTag = getTodayDateString();
+    const now = new Date();
+    const timeTag = `${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
+    const filename = `HR_Daily_Tasks_AutoExtract_${dateTag}_${timeTag}.xlsx`;
+
+    const exportTasks = (tasks && tasks.length > 0) ? tasks : [];
+    
+    const exportData = exportTasks.map(t => ({
+      'Date': t.date,
+      'Time': formatTimeCompact(t.time),
+      'Task / Activity': t.title,
+      'Description': t.description || '',
+      'Category': t.category,
+      'Priority': t.priority,
+      'Status': t.status,
+      'Assigned To': t.assignedTo,
+      'Notes': t.notes || '',
+      'Follow-up Date': t.followUpDate || '',
+    }));
+
+    const ws = exportData.length > 0
+      ? XLSX.utils.json_to_sheet(exportData, { header: EXCEL_STANDARD_COLUMNS })
+      : XLSX.utils.json_to_sheet(USER_SAMPLE_EXCEL_ROWS, { header: EXCEL_STANDARD_COLUMNS });
+
+    ws['!cols'] = [
+      { wch: 14 },
+      { wch: 12 },
+      { wch: 48 },
+      { wch: 50 },
+      { wch: 24 },
+      { wch: 12 },
+      { wch: 14 },
+      { wch: 28 },
+      { wch: 50 },
+      { wch: 16 },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'HR Tasks');
+
+    XLSX.writeFile(wb, filename, { bookType: 'xlsx' });
+    return true;
+  } catch (err) {
+    console.error('Error auto-extracting Excel on exit:', err);
+    return false;
+  }
 }

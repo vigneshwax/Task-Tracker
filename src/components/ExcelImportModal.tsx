@@ -4,6 +4,7 @@ import { formatTimeCompact } from '../utils/storage';
 import { 
   parseUploadedExcel, 
   convertRowsToTasks, 
+  normalizeTime,
   ParsedSpreadsheet, 
   EXCEL_STANDARD_COLUMNS,
   getUserSampleParsedSpreadsheet,
@@ -503,7 +504,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                             {mapping.date ? String(row[mapping.date] || 'Today') : 'Today'}
                           </td>
                           <td className="px-3 py-2 text-slate-600 dark:text-slate-300 font-mono-numbers whitespace-nowrap">
-                            {mapping.time ? formatTimeCompact(String(row[mapping.time] || '09:00 AM')) : '09:00 AM'}
+                            {normalizeTime(mapping.time ? row[mapping.time] : '09:00 AM')}
                           </td>
                           <td className="px-3 py-2 text-slate-900 dark:text-white font-medium max-w-xs truncate">
                             {mapping.title ? String(row[mapping.title] || '—') : '—'}

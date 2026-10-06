@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { HRTask, ViewMode, TaskFilterState, TaskStatus, DailyNoteData, UserProfileSettings } from './types/hrTask';
+import { HRTask, ViewMode, TaskFilterState, TaskStatus, DailyNoteData, UserProfileSettings, KeepNote } from './types/hrTask';
 import { 
   loadTasksFromStorage, 
   saveTasksToStorage, 
@@ -13,8 +13,9 @@ import {
   parseTimeParts
 } from './utils/storage';
 import { getStoredCategories, saveStoredCategories } from './utils/categories';
-import { downloadExcelTemplate } from './utils/excel';
+import { downloadExcelTemplate, autoExtractExcelOnExit } from './utils/excel';
 import { getInitialTheme, applyTheme, ThemeMode } from './utils/theme';
+import { loadKeepNotesFromStorage, saveKeepNotesToStorage } from './utils/keepNotesStorage';
 
 // Components
 import { Header } from './components/Header';
@@ -24,6 +25,7 @@ import { KanbanView } from './components/KanbanView';
 import { CalendarView } from './components/CalendarView';
 import { AnalyticsView } from './components/AnalyticsView';
 import { DailyNoteView } from './components/DailyNoteView';
+import { KeepNotesView } from './components/KeepNotesView';
 import { DashboardSidebar } from './components/DashboardSidebar';
 import { DashboardView } from './components/DashboardView';
 import { SettingsView } from './components/SettingsView';
@@ -33,6 +35,7 @@ import { ExcelImportModal } from './components/ExcelImportModal';
 import { ExcelExportModal } from './components/ExcelExportModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { FollowUpSection } from './components/FollowUpSection';
+import { CloseWebsiteModal } from './components/CloseWebsiteModal';
 
 import { BellRing, CheckCircle2, ChevronRight, X, Sparkles } from 'lucide-react';
 
@@ -125,8 +128,24 @@ export default function App() {
 
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isCloseWebsiteModalOpen, setIsCloseWebsiteModalOpen] = useState(false);
   const [showFollowUpBanner, setShowFollowUpBanner] = useState(false);
   const [isTableFullScreen, setIsTableFullScreen] = useState(false);
+
+  // Preference: Auto-extract Excel on exit/close
+  const [autoExtractOnClose, setAutoExtractOnClose] = useState<boolean>(() => {
+    const saved = localStorage.getItem('hr_auto_extract_on_close');
+    return saved !== null ? saved === 'true' : true;
+  });
+
+  const handleToggleAutoExtractOnClose = useCallback(() => {
+    setAutoExtractOnClose(prev => {
+      const next = !prev;
+      localStorage.setItem('hr_auto_extract_on_close', String(next));
+      showToast(next ? 'Auto-extract Excel on exit enabled' : 'Auto-extract Excel on exit disabled');
+      return next;
+    });
+  }, []);
 
   // Delete Confirm State
   const [confirmDeleteModal, setConfirmDeleteModal] = useState<{
@@ -150,6 +169,50 @@ export default function App() {
       setToastMessage(null);
     }, 3500);
   }, []);
+
+  // Google Keep Style Notes State
+  const [keepNotes, setKeepNotes] = useState<KeepNote[]>(() => loadKeepNotesFromStorage());
+
+  const handleAddKeepNote = useCallback((newNoteData: Omit<KeepNote, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const newNote: KeepNote = {
+      ...newNoteData,
+      id: `keep-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    setKeepNotes(prev => {
+      const updated = [newNote, ...prev];
+      saveKeepNotesToStorage(updated);
+      return updated;
+    });
+  }, []);
+
+  const handleUpdateKeepNote = useCallback((updatedNote: KeepNote) => {
+    setKeepNotes(prev => {
+      const updated = prev.map(n => n.id === updatedNote.id ? updatedNote : n);
+      saveKeepNotesToStorage(updated);
+      return updated;
+    });
+  }, []);
+
+  const handleDeleteKeepNote = useCallback((id: string) => {
+    setKeepNotes(prev => {
+      const updated = prev.filter(n => n.id !== id);
+      saveKeepNotesToStorage(updated);
+      return updated;
+    });
+  }, []);
+
+  const handleRestoreKeepNotes = useCallback((restored: KeepNote[]) => {
+    setKeepNotes(restored);
+    saveKeepNotesToStorage(restored);
+  }, []);
+
+  const handleClearAllKeepNotes = useCallback(() => {
+    setKeepNotes([]);
+    saveKeepNotesToStorage([]);
+    showToast('Cleared all standalone notes');
+  }, [showToast]);
 
   // Save tasks on modification
   const updateTasks = useCallback((newTasks: HRTask[]) => {
@@ -449,6 +512,36 @@ export default function App() {
     setSelectedTaskIds([]);
   }, []);
 
+  // Before closing the page / tab: automatically extract Excel spreadsheet
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (autoExtractOnClose && tasks.length > 0) {
+        try {
+          autoExtractExcelOnExit(tasks);
+        } catch (err) {
+          console.error('Failed to auto-extract Excel on beforeunload', err);
+        }
+        e.preventDefault();
+        e.returnValue = 'Extracting your Excel spreadsheet backup. Are you sure you want to close?';
+        return e.returnValue;
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [tasks, autoExtractOnClose]);
+
+  // Handler for explicit "Close Website" action
+  const handleCloseWebsite = useCallback(() => {
+    const success = autoExtractExcelOnExit(tasks);
+    if (success) {
+      showToast('Excel spreadsheet extracted & saved to Downloads!');
+    }
+    setIsCloseWebsiteModalOpen(true);
+  }, [tasks, showToast]);
+
   // Filter tasks for export
   const filteredTasksForExport = useMemo(() => {
     return tasks.filter(t => {
@@ -485,7 +578,9 @@ export default function App() {
         onOpenFollowUpBanner={() => setShowFollowUpBanner(!showFollowUpBanner)}
         currentTheme={theme}
         onToggleTheme={handleToggleTheme}
+        onCloseWebsite={handleCloseWebsite}
         userName={userProfile.name}
+        notesCount={keepNotes.length}
       />
 
       {/* App Workspace Body */}
@@ -575,6 +670,7 @@ export default function App() {
                     onSelectView={setViewMode}
                     dailyNote={dailyNote}
                     onUpdateDailyNote={handleSaveDailyNote}
+                    onAddKeepNote={handleAddKeepNote}
                     layout="horizontal"
                   />
                 }
@@ -609,6 +705,7 @@ export default function App() {
                   onSelectView={setViewMode}
                   dailyNote={dailyNote}
                   onUpdateDailyNote={handleSaveDailyNote}
+                  onAddKeepNote={handleAddKeepNote}
                   layout="horizontal"
                 />
               </div>
@@ -689,7 +786,7 @@ export default function App() {
           </div>
         )}
 
-        {/* VIEW 5: Daily Planner & Note View */}
+        {/* VIEW 5: Daily Planner View */}
         {viewMode === 'daily-note' && (
           <div className="space-y-6">
             <DailyNoteView
@@ -709,6 +806,21 @@ export default function App() {
           </div>
         )}
 
+        {/* VIEW 6: Google Keep Style Notes View */}
+        {viewMode === 'notes' && (
+          <div className="space-y-6">
+            <KeepNotesView
+              notes={keepNotes}
+              onAddNote={handleAddKeepNote}
+              onUpdateNote={handleUpdateKeepNote}
+              onDeleteNote={handleDeleteKeepNote}
+              onRestoreNotes={handleRestoreKeepNotes}
+              onClearAllNotes={handleClearAllKeepNotes}
+              showToast={showToast}
+            />
+          </div>
+        )}
+
         {/* VIEW 6: SETTINGS & CONFIGURATION PAGE */}
         {viewMode === 'settings' && (
           <SettingsView
@@ -724,6 +836,12 @@ export default function App() {
             onResetDemoData={handleResetDemoData}
             onClearCompletedTasks={handleClearCompletedTasks}
             onClearAllTasks={handlePromptClearAllTasks}
+            autoExtractOnClose={autoExtractOnClose}
+            onToggleAutoExtractOnClose={handleToggleAutoExtractOnClose}
+            onCloseWebsite={handleCloseWebsite}
+            keepNotes={keepNotes}
+            onRestoreKeepNotes={handleRestoreKeepNotes}
+            onClearAllKeepNotes={handleClearAllKeepNotes}
             showToast={showToast}
           />
         )}
@@ -794,6 +912,14 @@ export default function App() {
         isDestructive={true}
       />
 
+      {/* Close Website & Auto-Extract Modal */}
+      <CloseWebsiteModal
+        isOpen={isCloseWebsiteModalOpen}
+        onClose={() => setIsCloseWebsiteModalOpen(false)}
+        taskCount={tasks.length}
+        onExtractAgain={handleCloseWebsite}
+      />
+
       {/* Footer */}
       <footer className="border-t border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 py-4 mt-12 text-center text-xs text-slate-500 dark:text-slate-400">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
@@ -804,6 +930,14 @@ export default function App() {
             <span>Excel 97-365 Compatible</span>
             <span>·</span>
             <span>Dark & Light Themes</span>
+            <span>·</span>
+            <button
+              onClick={handleCloseWebsite}
+              className="text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 hover:underline cursor-pointer font-medium"
+              title="Extract Excel backup and close website"
+            >
+              Close Website & Extract Excel
+            </button>
           </div>
         </div>
       </footer>

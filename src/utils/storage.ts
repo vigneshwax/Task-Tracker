@@ -37,52 +37,98 @@ export function parseTimeParts(val: any): ParsedTimeResult {
     return { timeFormatted: '09:00 AM', timeOnly: '09:00', ampm: 'AM' };
   }
 
-  // Handle Excel numeric serial fraction (e.g. 0.444444 = 10:40 AM, 0.583333 = 02:00 PM)
-  if (typeof val === 'number' || (!isNaN(Number(val)) && Number(val) > 0 && Number(val) < 1 && !String(val).includes(':'))) {
-    const num = Number(val);
-    const totalMinutes = Math.round(num * 24 * 60);
-    let h24 = Math.floor(totalMinutes / 60) % 24;
-    const m = totalMinutes % 60;
+  // 1. JavaScript Date object (e.g. from SheetJS or parsed datetime)
+  if (val instanceof Date && !isNaN(val.getTime())) {
+    const h24 = val.getHours();
+    const m = String(val.getMinutes()).padStart(2, '0');
     const ampm: 'AM' | 'PM' = h24 >= 12 ? 'PM' : 'AM';
-    let h12 = h24 % 12;
-    if (h12 === 0) h12 = 12;
-    const timeOnly = `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    const h12 = h24 % 12 || 12;
+    const timeOnly = `${String(h12).padStart(2, '0')}:${m}`;
     return { timeFormatted: `${timeOnly} ${ampm}`, timeOnly, ampm };
   }
 
-  const raw = String(val).trim();
-  if (!raw || raw === '—') {
-    return { timeFormatted: '—', timeOnly: '—', ampm: 'AM' };
+  // 2. Numeric values: Excel serial date/time or float or integer hour
+  if (typeof val === 'number' || (!isNaN(Number(val)) && !String(val).includes(':') && !String(val).includes('-') && !String(val).includes('/'))) {
+    const num = Number(val);
+    if (!isNaN(num) && num > 0) {
+      // Fraction of a day in Excel (e.g. 0.44444444 = 10:40 AM, 45566.44444 = 10:40 AM)
+      const frac = num % 1;
+      if (frac > 0.00001) {
+        const totalMinutes = Math.round(frac * 24 * 60);
+        let h24 = Math.floor(totalMinutes / 60) % 24;
+        const m = String(totalMinutes % 60).padStart(2, '0');
+        const ampm: 'AM' | 'PM' = h24 >= 12 ? 'PM' : 'AM';
+        let h12 = h24 % 12 || 12;
+        const timeOnly = `${String(h12).padStart(2, '0')}:${m}`;
+        return { timeFormatted: `${timeOnly} ${ampm}`, timeOnly, ampm };
+      }
+      // Integer hour e.g. 9 or 14
+      if (num >= 1 && num <= 24) {
+        let h24 = Math.floor(num);
+        const ampm: 'AM' | 'PM' = h24 >= 12 ? 'PM' : 'AM';
+        let h12 = h24 % 12 || 12;
+        const timeOnly = `${String(h12).padStart(2, '0')}:00`;
+        return { timeFormatted: `${timeOnly} ${ampm}`, timeOnly, ampm };
+      }
+    }
   }
 
-  // Normalize "A.M." / "P.M." / "am" / "pm" / "a.m." / "p.m."
+  // 3. String normalization
+  let raw = String(val).trim();
+  if (!raw || raw === '—' || raw === '-') {
+    return { timeFormatted: '09:00 AM', timeOnly: '09:00', ampm: 'AM' };
+  }
+
+  // Clean non-breaking spaces, excessive spaces, and normalize dots in A.M./P.M.
   let str = raw
+    .replace(/[\u00A0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]/g, ' ')
     .replace(/a\.m\./gi, 'AM')
     .replace(/p\.m\./gi, 'PM')
-    .replace(/\s+/g, ' ')
+    .replace(/(\d+)\s*([AaPp][Mm])/g, '$1 $2')
     .trim();
 
-  // Check if explicit AM or PM exists
+  // If the string contains an epoch date from Excel time (e.g. "1899-12-31" or "1900-01-00" with or without time)
+  // Check if it's an ISO datetime or has time component after date: e.g. "1899-12-31 10:40:00" or "2026-10-01T10:40:00"
+  const dtMatch = str.match(/(?:[T\s])(\d{1,2})[:.](\d{2})(?::\d{2})?(?:\s*([AaPp][Mm]))?/);
+  if (dtMatch) {
+    let hours = parseInt(dtMatch[1], 10);
+    const minutes = dtMatch[2];
+    const ampmStr = dtMatch[3];
+    let ampm: 'AM' | 'PM' = 'AM';
+    if (ampmStr) {
+      ampm = /pm/i.test(ampmStr) ? 'PM' : 'AM';
+      hours = hours % 12 || 12;
+    } else {
+      ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12 || 12;
+    }
+    const timeOnly = `${String(hours).padStart(2, '0')}:${minutes}`;
+    return { timeFormatted: `${timeOnly} ${ampm}`, timeOnly, ampm };
+  }
+
+  // If the string is purely a date without time (like "1899-12-31" or "2026-10-01"):
+  if (/^\d{4}[-/]\d{2}[-/]\d{2}$/.test(str)) {
+    return { timeFormatted: '09:00 AM', timeOnly: '09:00', ampm: 'AM' };
+  }
+
+  // Check if explicit AM or PM exists in the string
   const hasAm = /am/i.test(str);
   const hasPm = /pm/i.test(str);
 
-  // Extract digits (supports "10.40 AM", "10:40 AM", "10.40", "14:00", "10:40:00", "9:30")
-  const digitsMatch = str.match(/^(\d{1,2})[.:](\d{2})(?::\d{2})?/);
-  if (digitsMatch) {
-    let hours = parseInt(digitsMatch[1], 10);
-    const minutes = digitsMatch[2];
+  // Match time formats like "10.40 AM", "10:40 AM", "10.40", "10:40", "02.00 PM", "14:00", "14.00"
+  const timeMatch = str.match(/(\d{1,2})[.:](\d{2})(?:[.:](\d{2}))?/);
+  if (timeMatch) {
+    let hours = parseInt(timeMatch[1], 10);
+    const minutes = timeMatch[2];
     let ampm: 'AM' | 'PM' = 'AM';
 
     if (hasPm) {
       ampm = 'PM';
-      if (hours === 0) hours = 12;
-      else if (hours > 12) hours = hours % 12;
+      hours = hours % 12 || 12;
     } else if (hasAm) {
       ampm = 'AM';
-      if (hours === 0) hours = 12;
-      else if (hours > 12) hours = hours % 12;
+      hours = hours % 12 || 12;
     } else {
-      // 24-hour inference
       if (hours >= 12) {
         ampm = 'PM';
         hours = hours % 12 || 12;
@@ -100,19 +146,15 @@ export function parseTimeParts(val: any): ParsedTimeResult {
     };
   }
 
-  // Check if single hour e.g. "9 AM", "2 PM", "14", "9"
-  const singleHourMatch = str.match(/^(\d{1,2})/);
+  // Single hour with or without AM/PM: e.g. "9 AM", "2 PM", "14", "9"
+  const singleHourMatch = str.match(/(\d{1,2})\s*([AaPp][Mm])?/);
   if (singleHourMatch) {
     let hours = parseInt(singleHourMatch[1], 10);
+    const ampmStr = singleHourMatch[2];
     let ampm: 'AM' | 'PM' = 'AM';
-    if (hasPm) {
-      ampm = 'PM';
-      if (hours === 0) hours = 12;
-      else if (hours > 12) hours = hours % 12;
-    } else if (hasAm) {
-      ampm = 'AM';
-      if (hours === 0) hours = 12;
-      else if (hours > 12) hours = hours % 12;
+    if (ampmStr) {
+      ampm = /pm/i.test(ampmStr) ? 'PM' : 'AM';
+      hours = hours % 12 || 12;
     } else {
       if (hours >= 12) {
         ampm = 'PM';

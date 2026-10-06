@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { HRTask, DailyNoteData, ViewMode } from '../types/hrTask';
+import { HRTask, DailyNoteData, ViewMode, KeepNote } from '../types/hrTask';
 import { isDateToday, isDateOverdue, formatDateFriendly } from '../utils/storage';
 import { 
   BellRing, 
@@ -19,6 +19,7 @@ interface DashboardSidebarProps {
   onSelectView: (view: ViewMode) => void;
   dailyNote: DailyNoteData;
   onUpdateDailyNote: (note: DailyNoteData) => void;
+  onAddKeepNote?: (note: Omit<KeepNote, 'id' | 'createdAt' | 'updatedAt'>) => void;
   layout?: 'vertical' | 'horizontal';
 }
 
@@ -30,6 +31,7 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
   onSelectView,
   dailyNote,
   onUpdateDailyNote,
+  onAddKeepNote,
   layout = 'vertical',
 }) => {
   const [quickNoteText, setQuickNoteText] = useState('');
@@ -55,13 +57,25 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
 
   const handleAppendQuickNote = () => {
     if (!quickNoteText.trim()) return;
-    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const newContent = `${dailyNote.content}\n\n[${timestamp}] ${quickNoteText.trim()}`;
-    onUpdateDailyNote({
-      ...dailyNote,
-      content: newContent,
-      lastUpdated: new Date().toISOString().split('T')[0],
-    });
+    if (onAddKeepNote) {
+      onAddKeepNote({
+        title: '',
+        content: quickNoteText.trim(),
+        isChecklist: false,
+        checklistItems: [],
+        color: 'sand',
+        isPinned: false,
+        tags: [],
+      });
+    } else {
+      const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const newContent = `${dailyNote.content}\n\n[${timestamp}] ${quickNoteText.trim()}`;
+      onUpdateDailyNote({
+        ...dailyNote,
+        content: newContent,
+        lastUpdated: new Date().toISOString().split('T')[0],
+      });
+    }
     setQuickNoteText('');
   };
 
@@ -192,21 +206,21 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
           </div>
         </div>
 
-        {/* 3. Quick Note / Candidate Debrief Snippet */}
+        {/* 3. Quick Note / Scratchpad (Google Keep style) */}
         <div className="bg-white dark:bg-slate-900 p-4.5 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800 mb-2.5">
               <div className="flex items-center gap-1.5">
-                <FileText className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <FileText className="w-4 h-4 text-amber-500" />
                 <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                  Quick HR Scratchpad
+                  Quick Scratchpad
                 </h3>
               </div>
               <button
-                onClick={() => onSelectView('daily-note')}
-                className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium cursor-pointer"
+                onClick={() => onSelectView('notes')}
+                className="text-[11px] text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 font-semibold cursor-pointer"
               >
-                Open Planner
+                Open Notes
               </button>
             </div>
 
@@ -215,21 +229,21 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
                 rows={3}
                 value={quickNoteText}
                 onChange={(e) => setQuickNoteText(e.target.value)}
-                placeholder="Log phone screen notes, candidate debrief observations, offer quotes..."
-                className="w-full p-2.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-slate-900 dark:focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-800 text-slate-800 dark:text-slate-100 resize-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                placeholder="Jot down a quick thought, memo, or reminder..."
+                className="w-full p-2.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-amber-500/70 focus:bg-white dark:focus:bg-slate-800 text-slate-800 dark:text-slate-100 resize-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
               />
               <button
                 onClick={handleAppendQuickNote}
                 disabled={!quickNoteText.trim()}
-                className="w-full py-1.5 text-xs font-semibold bg-slate-900 dark:bg-indigo-600 hover:bg-slate-800 dark:hover:bg-indigo-700 disabled:opacity-40 text-white rounded-lg transition-colors cursor-pointer"
+                className="w-full py-1.5 text-xs font-semibold bg-slate-900 dark:bg-amber-600 hover:bg-slate-800 dark:hover:bg-amber-700 disabled:opacity-40 text-white rounded-lg transition-colors cursor-pointer"
               >
-                Add to Daily Journal
+                Save to Notes
               </button>
             </div>
           </div>
 
           <div className="mt-3 pt-2 text-[10px] text-slate-400 dark:text-slate-500 flex items-center justify-between">
-            <span>Syncs directly with your Daily Planner</span>
+            <span>Saves to separate Google Keep Notes</span>
             <span className="font-mono">{new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
           </div>
         </div>
