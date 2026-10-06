@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
-import { HRTask, ExcelColumnMapping, TaskPriority, TaskStatus } from '../types/hrTask';
+import { HRTask, ExcelColumnMapping, TaskPriority, TaskStatus, KeepNote, KeepNoteColor, KeepChecklistItem } from '../types/hrTask';
 import { getTodayDateString, formatTimeCompact, parseTimeParts } from './storage';
+import { loadKeepNotesFromStorage, INITIAL_SAMPLE_KEEP_NOTES } from './keepNotesStorage';
 
 export const EXCEL_STANDARD_COLUMNS = [
   'Date',
@@ -14,6 +15,115 @@ export const EXCEL_STANDARD_COLUMNS = [
   'Notes',
   'Follow-up Date'
 ];
+
+export const EXCEL_NOTES_COLUMNS = [
+  'Note Title',
+  'Content / Details',
+  'Type',
+  'Checklist Items',
+  'Checklist Progress',
+  'Tags / Category',
+  'Pinned',
+  'Color',
+  'Created Date',
+  'Last Updated'
+];
+
+/**
+ * Converts KeepNote array to Excel row objects for the separate "Notes" sheet
+ */
+export function convertNotesToExcelRows(notes: KeepNote[]): Record<string, any>[] {
+  return notes.map(n => {
+    let checklistStr = '';
+    let progressStr = '';
+    if (n.isChecklist && n.checklistItems && n.checklistItems.length > 0) {
+      const completedCount = n.checklistItems.filter(item => item.completed).length;
+      progressStr = `${completedCount}/${n.checklistItems.length} completed (${Math.round((completedCount / n.checklistItems.length) * 100)}%)`;
+      checklistStr = n.checklistItems
+        .map(item => `${item.completed ? '[✓]' : '[ ]'} ${item.text}`)
+        .join('\n');
+    }
+
+    const mainContent = n.content || (n.isChecklist ? checklistStr : '');
+    const createdStr = n.createdAt ? new Date(n.createdAt).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' }) : '';
+    const updatedStr = n.updatedAt ? new Date(n.updatedAt).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' }) : '';
+
+    return {
+      'Note Title': n.title || 'Untitled Note',
+      'Content / Details': mainContent,
+      'Type': n.isChecklist ? 'Checklist' : 'Text Note',
+      'Checklist Items': checklistStr || '—',
+      'Checklist Progress': progressStr || '—',
+      'Tags / Category': (n.tags && n.tags.length > 0) ? n.tags.join(', ') : '',
+      'Pinned': n.isPinned ? 'Yes' : 'No',
+      'Color': n.color ? (n.color.charAt(0).toUpperCase() + n.color.slice(1)) : 'Default',
+      'Created Date': createdStr,
+      'Last Updated': updatedStr,
+    };
+  });
+}
+
+/**
+ * Parses raw Excel rows from the separate "Notes" sheet into KeepNote objects
+ */
+export function parseNotesFromExcelRows(rows: Record<string, any>[]): KeepNote[] {
+  const now = Date.now();
+  const parsedNotes: KeepNote[] = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const rawTitle = String(row['Note Title'] || row['Title'] || row['Task / Activity'] || '').trim();
+    const rawContent = String(row['Content / Details'] || row['Content'] || row['Description'] || row['Notes'] || '').trim();
+    const rawType = String(row['Type'] || '').toLowerCase();
+    const rawChecklist = String(row['Checklist Items'] || '').trim();
+    const rawTags = String(row['Tags / Category'] || row['Tags'] || row['Category'] || '').trim();
+    const rawPinned = String(row['Pinned'] || '').toLowerCase();
+    const rawColor = String(row['Color'] || 'default').toLowerCase().trim() as KeepNoteColor;
+
+    if (!rawTitle && !rawContent && !rawChecklist) {
+      continue; // Skip empty note rows
+    }
+
+    const isChecklist = rawType.includes('check') || (rawChecklist !== '' && rawChecklist !== '—');
+    const checklistItems: KeepChecklistItem[] = [];
+
+    if (rawChecklist && rawChecklist !== '—') {
+      const lines = rawChecklist.split('\n');
+      for (let j = 0; j < lines.length; j++) {
+        const line = lines[j].trim();
+        if (!line) continue;
+        const isDone = line.startsWith('[✓]') || line.startsWith('[x]') || line.startsWith('[X]');
+        const text = line.replace(/^\[[✓xX\s]\]\s*/, '').trim();
+        checklistItems.push({
+          id: `item-${now}-${i}-${j}`,
+          text: text || line,
+          completed: isDone,
+        });
+      }
+    }
+
+    const tags = rawTags
+      ? rawTags.split(',').map(t => t.trim()).filter(Boolean)
+      : [];
+
+    const isPinned = rawPinned === 'yes' || rawPinned === 'true' || rawPinned === '1';
+
+    parsedNotes.push({
+      id: `keep-excel-${now}-${i}-${Math.random().toString(36).substr(2, 5)}`,
+      title: rawTitle || 'Imported Note',
+      content: rawContent,
+      isChecklist: isChecklist && checklistItems.length > 0,
+      checklistItems,
+      color: (['default', 'sand', 'peach', 'coral', 'mint', 'sage', 'fog', 'storm', 'dusk', 'blossom', 'clay'].includes(rawColor) ? rawColor : 'default') as KeepNoteColor,
+      isPinned,
+      tags,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  return parsedNotes;
+}
 
 /**
  * Exact sample Excel rows from the user's template spreadsheet
@@ -142,13 +252,13 @@ export const USER_SAMPLE_EXCEL_ROWS: Record<string, any>[] = [
 ];
 
 /**
- * Downloads a clean Excel template pre-populated with the user's sample HR tasks
+ * Downloads a clean Excel template pre-populated with the user's sample HR tasks and sample Notes in separate sheets
  */
-export function downloadExcelTemplate(): void {
-  const ws = XLSX.utils.json_to_sheet(USER_SAMPLE_EXCEL_ROWS, { header: EXCEL_STANDARD_COLUMNS });
+export function downloadExcelTemplate(notes?: KeepNote[]): void {
+  const wsTasks = XLSX.utils.json_to_sheet(USER_SAMPLE_EXCEL_ROWS, { header: EXCEL_STANDARD_COLUMNS });
   
-  // Set nice column widths
-  ws['!cols'] = [
+  // Set nice column widths for HR Tasks
+  wsTasks['!cols'] = [
     { wch: 14 }, // Date
     { wch: 12 }, // Time
     { wch: 42 }, // Task / Activity
@@ -162,26 +272,49 @@ export function downloadExcelTemplate(): void {
   ];
 
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'HR Tasks');
+  XLSX.utils.book_append_sheet(wb, wsTasks, 'HR Tasks');
 
-  // Add Instructions Sheet
+  // Sheet 2: Separate "Notes" Sheet (Google Keep Style Notes)
+  const templateNotes = (notes && notes.length > 0) ? notes : INITIAL_SAMPLE_KEEP_NOTES;
+  const notesRows = convertNotesToExcelRows(templateNotes);
+  const wsNotes = XLSX.utils.json_to_sheet(notesRows, { header: EXCEL_NOTES_COLUMNS });
+  wsNotes['!cols'] = [
+    { wch: 32 }, // Note Title
+    { wch: 55 }, // Content / Details
+    { wch: 14 }, // Type
+    { wch: 45 }, // Checklist Items
+    { wch: 22 }, // Checklist Progress
+    { wch: 25 }, // Tags / Category
+    { wch: 10 }, // Pinned
+    { wch: 12 }, // Color
+    { wch: 20 }, // Created Date
+    { wch: 20 }, // Last Updated
+  ];
+  XLSX.utils.book_append_sheet(wb, wsNotes, 'Notes');
+
+  // Sheet 3: Instructions & Guide
   const instructions = [
-    { 'Field': 'Date', 'Format': 'YYYY-MM-DD (e.g. 2026-10-01)', 'Required': 'Yes' },
-    { 'Field': 'Time', 'Format': '10.40 AM or 10:40 AM', 'Required': 'No' },
-    { 'Field': 'Task / Activity', 'Format': 'Role or Activity title (e.g. Accounts Candidate - K Govind Reddy)', 'Required': 'Yes' },
-    { 'Field': 'Description', 'Format': 'Contact number, candidate details, or notes (e.g. 9063020840)', 'Required': 'No' },
-    { 'Field': 'Category', 'Format': 'BGV, Resume Share, Resume Screening, Update, Negotiation, Follow-up, etc.', 'Required': 'No' },
-    { 'Field': 'Priority', 'Format': 'High, Medium, or Low', 'Required': 'No (Defaults to Medium)' },
-    { 'Field': 'Status', 'Format': 'Pending, In Progress, or Completed', 'Required': 'No (Defaults to Pending)' },
-    { 'Field': 'Assigned To', 'Format': 'Me or recruiter name', 'Required': 'No' },
-    { 'Field': 'Notes', 'Format': 'Free text comments or links', 'Required': 'No' },
-    { 'Field': 'Follow-up Date', 'Format': 'YYYY-MM-DD for tracking follow-ups', 'Required': 'No' },
+    { 'Sheet / Section': 'HR Tasks (Sheet 1)', 'Field': 'Date', 'Format': 'YYYY-MM-DD (e.g. 2026-10-01)', 'Required': 'Yes' },
+    { 'Sheet / Section': 'HR Tasks (Sheet 1)', 'Field': 'Time', 'Format': '10.40 AM or 10:40 AM', 'Required': 'No' },
+    { 'Sheet / Section': 'HR Tasks (Sheet 1)', 'Field': 'Task / Activity', 'Format': 'Role or Activity title (e.g. Accounts Candidate - K Govind Reddy)', 'Required': 'Yes' },
+    { 'Sheet / Section': 'HR Tasks (Sheet 1)', 'Field': 'Description', 'Format': 'Contact number, candidate details, or notes (e.g. 9063020840)', 'Required': 'No' },
+    { 'Sheet / Section': 'HR Tasks (Sheet 1)', 'Field': 'Category', 'Format': 'BGV, Resume Share, Resume Screening, Update, Negotiation, Follow-up, etc.', 'Required': 'No' },
+    { 'Sheet / Section': 'HR Tasks (Sheet 1)', 'Field': 'Priority', 'Format': 'High, Medium, or Low', 'Required': 'No (Defaults to Medium)' },
+    { 'Sheet / Section': 'HR Tasks (Sheet 1)', 'Field': 'Status', 'Format': 'Pending, In Progress, or Completed', 'Required': 'No (Defaults to Pending)' },
+    { 'Sheet / Section': 'HR Tasks (Sheet 1)', 'Field': 'Assigned To', 'Format': 'Me or recruiter name', 'Required': 'No' },
+    { 'Sheet / Section': 'HR Tasks (Sheet 1)', 'Field': 'Notes', 'Format': 'Free text comments or links', 'Required': 'No' },
+    { 'Sheet / Section': 'HR Tasks (Sheet 1)', 'Field': 'Follow-up Date', 'Format': 'YYYY-MM-DD for tracking follow-ups', 'Required': 'No' },
+    { 'Sheet / Section': 'Notes (Sheet 2)', 'Field': 'Note Title', 'Format': 'Title of the note or checklist', 'Required': 'Yes' },
+    { 'Sheet / Section': 'Notes (Sheet 2)', 'Field': 'Content / Details', 'Format': 'Freeform paragraphs, questions, notes, or details', 'Required': 'No' },
+    { 'Sheet / Section': 'Notes (Sheet 2)', 'Field': 'Type', 'Format': 'Checklist or Text Note', 'Required': 'No' },
+    { 'Sheet / Section': 'Notes (Sheet 2)', 'Field': 'Checklist Items', 'Format': '[✓] Completed item \\n [ ] Pending item', 'Required': 'No' },
+    { 'Sheet / Section': 'Notes (Sheet 2)', 'Field': 'Tags / Category', 'Format': 'Comma-separated labels e.g. Recruitment, Screening', 'Required': 'No' },
   ];
   const wsGuide = XLSX.utils.json_to_sheet(instructions);
-  wsGuide['!cols'] = [{ wch: 20 }, { wch: 65 }, { wch: 15 }];
+  wsGuide['!cols'] = [{ wch: 22 }, { wch: 20 }, { wch: 65 }, { wch: 15 }];
   XLSX.utils.book_append_sheet(wb, wsGuide, 'Guide & Instructions');
 
-  XLSX.writeFile(wb, 'My_Sample_HR_Tasks.xlsx');
+  XLSX.writeFile(wb, 'HR_Tasks_and_Notes_Template.xlsx');
 }
 
 /**
@@ -214,6 +347,9 @@ export interface ParsedSpreadsheet {
   headers: string[];
   rawRows: Record<string, any>[];
   detectedMapping: ExcelColumnMapping;
+  hasNotesSheet?: boolean;
+  notesSheetName?: string;
+  parsedNotes?: KeepNote[];
 }
 
 /**
@@ -342,12 +478,34 @@ export async function parseUploadedExcel(file: File): Promise<ParsedSpreadsheet>
     rawRows.push(merged);
   }
 
+  // Check if workbook contains a separate Notes sheet
+  let hasNotesSheet = false;
+  let notesSheetName = '';
+  let parsedNotes: KeepNote[] = [];
+
+  for (const sName of workbook.SheetNames) {
+    const norm = sName.toLowerCase().trim();
+    if (norm === 'notes' || norm === 'hr notes' || norm === 'keep notes' || norm === 'noted' || norm === 'quick notes') {
+      const wsNotes = workbook.Sheets[sName];
+      if (wsNotes) {
+        hasNotesSheet = true;
+        notesSheetName = sName;
+        const noteRows = XLSX.utils.sheet_to_json<Record<string, any>>(wsNotes, { defval: '' });
+        parsedNotes = parseNotesFromExcelRows(noteRows);
+      }
+      break;
+    }
+  }
+
   return {
     fileName: file.name,
     sheetNames: workbook.SheetNames,
     headers,
     rawRows,
     detectedMapping,
+    hasNotesSheet,
+    notesSheetName,
+    parsedNotes,
   };
 }
 
@@ -507,13 +665,42 @@ export function convertRowsToTasks(
 }
 
 /**
- * Exports tasks to Excel (.xlsx or .csv)
+ * Exports tasks to Excel (.xlsx or .csv) with optional separate "Notes" sheet
  */
 export function exportTasksToExcel(
   tasks: HRTask[],
   exportScopeName: string = 'Tasks',
-  format: 'xlsx' | 'csv' = 'xlsx'
+  format: 'xlsx' | 'csv' = 'xlsx',
+  notes?: KeepNote[],
+  includeNotesSheet: boolean = true
 ): void {
+  // For CSV format, CSV files do not support multiple sheets
+  if (format === 'csv') {
+    const exportData = tasks.map(t => ({
+      'Date': t.date,
+      'Time': formatTimeCompact(t.time),
+      'Task / Activity': t.title,
+      'Description': t.description || '',
+      'Category': t.category,
+      'Priority': t.priority,
+      'Status': t.status,
+      'Assigned To': t.assignedTo,
+      'Notes': t.notes || '',
+      'Follow-up Date': t.followUpDate || '',
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData, { header: EXCEL_STANDARD_COLUMNS });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'HR Tasks');
+
+    const dateTag = getTodayDateString();
+    const sanitizedScope = exportScopeName.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const filename = `HR_Daily_Tasks_${sanitizedScope}_${dateTag}.csv`;
+    XLSX.writeFile(wb, filename, { bookType: 'csv' });
+    return;
+  }
+
+  // Multi-sheet Excel workbook (.xlsx)
   const exportData = tasks.map(t => ({
     'Date': t.date,
     'Time': formatTimeCompact(t.time),
@@ -527,9 +714,9 @@ export function exportTasksToExcel(
     'Follow-up Date': t.followUpDate || '',
   }));
 
-  const ws = XLSX.utils.json_to_sheet(exportData, { header: EXCEL_STANDARD_COLUMNS });
+  const wsTasks = XLSX.utils.json_to_sheet(exportData, { header: EXCEL_STANDARD_COLUMNS });
 
-  ws['!cols'] = [
+  wsTasks['!cols'] = [
     { wch: 14 },
     { wch: 12 },
     { wch: 48 },
@@ -543,25 +730,77 @@ export function exportTasksToExcel(
   ];
 
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'HR Tasks');
+  
+  // Sheet 1: HR Tasks
+  XLSX.utils.book_append_sheet(wb, wsTasks, 'HR Tasks');
+
+  // Sheet 2: Separate "Notes" Sheet (Google Keep Style Notes)
+  if (includeNotesSheet) {
+    const rawNotes = notes && notes.length > 0 ? notes : loadKeepNotesFromStorage();
+    if (rawNotes && rawNotes.length > 0) {
+      const notesRows = convertNotesToExcelRows(rawNotes);
+      const wsNotes = XLSX.utils.json_to_sheet(notesRows, { header: EXCEL_NOTES_COLUMNS });
+      wsNotes['!cols'] = [
+        { wch: 32 }, // Note Title
+        { wch: 55 }, // Content / Details
+        { wch: 14 }, // Type
+        { wch: 45 }, // Checklist Items
+        { wch: 22 }, // Checklist Progress
+        { wch: 25 }, // Tags / Category
+        { wch: 10 }, // Pinned
+        { wch: 12 }, // Color
+        { wch: 20 }, // Created Date
+        { wch: 20 }, // Last Updated
+      ];
+      XLSX.utils.book_append_sheet(wb, wsNotes, 'Notes');
+    }
+  }
 
   const dateTag = getTodayDateString();
   const sanitizedScope = exportScopeName.replace(/[^a-zA-Z0-9_-]/g, '_');
-  const filename = `HR_Daily_Tasks_${sanitizedScope}_${dateTag}.${format}`;
+  const filename = `HR_Daily_Workspace_${sanitizedScope}_${dateTag}.xlsx`;
 
-  XLSX.writeFile(wb, filename, { bookType: format });
+  XLSX.writeFile(wb, filename, { bookType: 'xlsx' });
 }
 
 /**
- * Automatically extracts and downloads an Excel file containing all tasks.
+ * Exports Google Keep style notes directly to a dedicated Excel spreadsheet
+ */
+export function exportNotesToExcel(notes: KeepNote[], filename?: string): void {
+  const rawNotes = notes && notes.length > 0 ? notes : loadKeepNotesFromStorage();
+  const notesRows = convertNotesToExcelRows(rawNotes);
+  const wsNotes = XLSX.utils.json_to_sheet(notesRows, { header: EXCEL_NOTES_COLUMNS });
+  wsNotes['!cols'] = [
+    { wch: 32 },
+    { wch: 55 },
+    { wch: 14 },
+    { wch: 45 },
+    { wch: 22 },
+    { wch: 25 },
+    { wch: 10 },
+    { wch: 12 },
+    { wch: 20 },
+    { wch: 20 },
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, wsNotes, 'Notes');
+
+  const dateTag = getTodayDateString();
+  const finalFilename = filename || `HR_Google_Keep_Notes_${dateTag}.xlsx`;
+  XLSX.writeFile(wb, finalFilename, { bookType: 'xlsx' });
+}
+
+/**
+ * Automatically extracts and downloads an Excel file containing all tasks and notes in separate sheets.
  * Used before closing the page or when clicking "Close Website".
  */
-export function autoExtractExcelOnExit(tasks: HRTask[]): boolean {
+export function autoExtractExcelOnExit(tasks: HRTask[], notes?: KeepNote[]): boolean {
   try {
     const dateTag = getTodayDateString();
     const now = new Date();
     const timeTag = `${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
-    const filename = `HR_Daily_Tasks_AutoExtract_${dateTag}_${timeTag}.xlsx`;
+    const filename = `HR_Daily_Workspace_AutoExtract_${dateTag}_${timeTag}.xlsx`;
 
     const exportTasks = (tasks && tasks.length > 0) ? tasks : [];
     
@@ -578,11 +817,11 @@ export function autoExtractExcelOnExit(tasks: HRTask[]): boolean {
       'Follow-up Date': t.followUpDate || '',
     }));
 
-    const ws = exportData.length > 0
+    const wsTasks = exportData.length > 0
       ? XLSX.utils.json_to_sheet(exportData, { header: EXCEL_STANDARD_COLUMNS })
       : XLSX.utils.json_to_sheet(USER_SAMPLE_EXCEL_ROWS, { header: EXCEL_STANDARD_COLUMNS });
 
-    ws['!cols'] = [
+    wsTasks['!cols'] = [
       { wch: 14 },
       { wch: 12 },
       { wch: 48 },
@@ -596,7 +835,29 @@ export function autoExtractExcelOnExit(tasks: HRTask[]): boolean {
     ];
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'HR Tasks');
+    
+    // Sheet 1: HR Tasks
+    XLSX.utils.book_append_sheet(wb, wsTasks, 'HR Tasks');
+
+    // Sheet 2: Separate "Notes" Sheet (Google Keep Style Notes)
+    const exportNotes = (notes && notes.length > 0) ? notes : loadKeepNotesFromStorage();
+    if (exportNotes && exportNotes.length > 0) {
+      const notesRows = convertNotesToExcelRows(exportNotes);
+      const wsNotes = XLSX.utils.json_to_sheet(notesRows, { header: EXCEL_NOTES_COLUMNS });
+      wsNotes['!cols'] = [
+        { wch: 32 },
+        { wch: 55 },
+        { wch: 14 },
+        { wch: 45 },
+        { wch: 22 },
+        { wch: 25 },
+        { wch: 10 },
+        { wch: 12 },
+        { wch: 20 },
+        { wch: 20 },
+      ];
+      XLSX.utils.book_append_sheet(wb, wsNotes, 'Notes');
+    }
 
     XLSX.writeFile(wb, filename, { bookType: 'xlsx' });
     return true;

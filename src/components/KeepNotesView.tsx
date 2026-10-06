@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { KeepNote, KeepNoteColor, KeepChecklistItem } from '../types/hrTask';
 import { KEEP_COLOR_MAP } from '../utils/keepNotesStorage';
+import { exportNotesToExcel } from '../utils/excel';
 import { 
   Pin, 
   CheckSquare, 
@@ -19,7 +20,8 @@ import {
   Archive,
   ArrowRight,
   Download,
-  Upload
+  Upload,
+  FileSpreadsheet
 } from 'lucide-react';
 
 interface KeepNotesViewProps {
@@ -386,8 +388,20 @@ export const KeepNotesView: React.FC<KeepNotesViewProps> = ({
             </button>
           </div>
 
-          {/* Separate Notes Storage Actions: Export, Import & Clear */}
+          {/* Separate Notes Storage Actions: Export Excel, Export JSON, Import & Clear */}
           <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs gap-0.5">
+            <button
+              type="button"
+              onClick={() => {
+                exportNotesToExcel(notes);
+                showToast('Notes spreadsheet exported to Excel (.xlsx)!');
+              }}
+              title="Export Notes as Separate Sheet in Excel (.xlsx)"
+              className="p-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-white dark:hover:bg-slate-900 transition-colors cursor-pointer"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            </button>
+
             <button
               type="button"
               onClick={handleExportNotes}

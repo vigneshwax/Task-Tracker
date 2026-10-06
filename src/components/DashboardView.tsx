@@ -20,7 +20,9 @@ import {
   Layers,
   Flag,
   Flame,
-  BellRing
+  BellRing,
+  Database,
+  RefreshCw
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -33,6 +35,11 @@ interface DashboardViewProps {
   onViewTaskDetail?: (task: HRTask) => void;
   userName?: string;
   userRole?: string;
+  isAutoSyncing?: boolean;
+  isAutoPulling?: boolean;
+  lastPullTime?: string | null;
+  onSyncFromGoogleSheet?: () => void;
+  hasCloudConnected?: boolean;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -45,6 +52,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onViewTaskDetail,
   userName = 'HR Specialist',
   userRole = 'Talent Acquisition & HR Operations',
+  isAutoSyncing = false,
+  isAutoPulling = false,
+  lastPullTime,
+  onSyncFromGoogleSheet,
+  hasCloudConnected = false,
 }) => {
   const todayFormatted = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
@@ -141,7 +153,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <div className="relative overflow-hidden rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-6 sm:p-7 shadow-xs">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
                 Command Center
               </span>
@@ -149,6 +161,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <span className="text-xs text-slate-500 dark:text-slate-400 font-mono-numbers">
                 {todayFormatted}
               </span>
+              {hasCloudConnected && (
+                <>
+                  <span className="text-slate-300 dark:text-slate-700">·</span>
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/80">
+                    <span className={`w-1.5 h-1.5 rounded-full bg-emerald-500 ${isAutoPulling || isAutoSyncing ? 'animate-ping' : ''}`} />
+                    <span>{isAutoPulling ? 'Fetching Sheet...' : isAutoSyncing ? 'Syncing...' : 'Sheet Two-Way Sync Active'}</span>
+                    {onSyncFromGoogleSheet && (
+                      <button
+                        onClick={onSyncFromGoogleSheet}
+                        title="Pull latest edits from Google Sheet now"
+                        className="ml-0.5 p-0.5 hover:text-emerald-900 dark:hover:text-emerald-100 transition-colors cursor-pointer"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isAutoPulling ? 'animate-spin' : ''}`} />
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
 
             <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
@@ -236,65 +266,122 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* Primary KPI Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         
         {/* KPI 1: In Progress */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-xl p-4.5 shadow-2xs">
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-            <span className="font-medium">In Progress</span>
-            <Clock className="w-4 h-4 text-sky-500" />
-          </div>
-          <div className="mt-2.5 flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white font-mono-numbers">
-              {metrics.inProgress}
+        <div 
+          onClick={() => onSelectView('list')}
+          className="group bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-2xs hover:shadow-xs hover:border-sky-300 dark:hover:border-sky-800 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+          title="Click to view In Progress tasks in table"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              In Progress
             </span>
-            <span className="text-xs text-slate-500 dark:text-slate-400">active operations</span>
+            <div className="p-2 rounded-xl bg-sky-50 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400 border border-sky-100 dark:border-sky-900/40 group-hover:scale-105 transition-transform">
+              <Clock className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white font-mono-numbers tracking-tight">
+              {metrics.inProgress}
+            </div>
+            <div className="mt-1 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+              <span>Active operations</span>
+              <span className="text-[11px] text-sky-600 dark:text-sky-400 font-medium group-hover:underline">View →</span>
+            </div>
           </div>
         </div>
 
         {/* KPI 2: Pending Tasks */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-xl p-4.5 shadow-2xs">
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-            <span className="font-medium">Pending Queue</span>
-            <Circle className="w-4 h-4 text-amber-500" />
-          </div>
-          <div className="mt-2.5 flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white font-mono-numbers">
-              {metrics.pending}
+        <div 
+          onClick={() => onSelectView('list')}
+          className="group bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-2xs hover:shadow-xs hover:border-amber-300 dark:hover:border-amber-800 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+          title="Click to view Pending tasks in table"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Pending Queue
             </span>
-            <span className="text-xs text-slate-500 dark:text-slate-400">awaiting action</span>
+            <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-900/40 group-hover:scale-105 transition-transform">
+              <Circle className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white font-mono-numbers tracking-tight">
+              {metrics.pending}
+            </div>
+            <div className="mt-1 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+              <span>Awaiting action</span>
+              <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium group-hover:underline">View →</span>
+            </div>
           </div>
         </div>
 
         {/* KPI 3: Completed */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-xl p-4.5 shadow-2xs">
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-            <span className="font-medium">Completed</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+        <div 
+          onClick={() => onSelectView('list')}
+          className="group bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-2xs hover:shadow-xs hover:border-emerald-300 dark:hover:border-emerald-800 transition-all duration-200 cursor-pointer flex flex-col justify-between"
+          title="Click to view Completed tasks in table"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Completed
+            </span>
+            <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/40 group-hover:scale-105 transition-transform">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
           </div>
-          <div className="mt-2.5 flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white font-mono-numbers">
-              {metrics.completed}
-            </span>
-            <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold font-mono-numbers">
-              {metrics.completionRate}% closed
-            </span>
+          <div className="mt-3">
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white font-mono-numbers tracking-tight">
+                {metrics.completed}
+              </span>
+              <span className="inline-flex items-center text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-full border border-emerald-200/70 dark:border-emerald-800/60">
+                {metrics.completionRate}% closed
+              </span>
+            </div>
+            <div className="mt-1 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+              <span>Archived & done</span>
+              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium group-hover:underline">View →</span>
+            </div>
           </div>
         </div>
 
         {/* KPI 4: Follow-up Radar */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-xl p-4.5 shadow-2xs">
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-            <span className="font-medium">Follow-ups Due</span>
-            <BellRing className={`w-4 h-4 ${metrics.followUpsTodayOrOverdue.length > 0 ? 'text-amber-500 animate-pulse' : 'text-slate-400'}`} />
+        <div 
+          onClick={() => onSelectView('list')}
+          className={`group bg-white dark:bg-slate-900 border rounded-2xl p-4 sm:p-5 shadow-2xs hover:shadow-xs transition-all duration-200 cursor-pointer flex flex-col justify-between ${
+            metrics.followUpsTodayOrOverdue.length > 0 
+              ? 'border-amber-300/80 dark:border-amber-800/80 hover:border-amber-400 dark:hover:border-amber-700 bg-amber-50/20 dark:bg-amber-950/10' 
+              : 'border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+          }`}
+          title="Click to view Follow-up tasks"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Follow-ups Due
+            </span>
+            <div className={`p-2 rounded-xl border group-hover:scale-105 transition-transform ${
+              metrics.followUpsTodayOrOverdue.length > 0
+                ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border-amber-200/80 dark:border-amber-800/80'
+                : 'bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-200/60 dark:border-slate-700/60'
+            }`}>
+              <BellRing className={`w-4 h-4 ${metrics.followUpsTodayOrOverdue.length > 0 ? 'animate-pulse text-amber-500' : ''}`} />
+            </div>
           </div>
-          <div className="mt-2.5 flex items-baseline gap-2">
-            <span className={`text-2xl sm:text-3xl font-bold font-mono-numbers ${metrics.followUpsTodayOrOverdue.length > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-white'}`}>
+          <div className="mt-3">
+            <div className={`text-2xl sm:text-3xl font-extrabold font-mono-numbers tracking-tight ${
+              metrics.followUpsTodayOrOverdue.length > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-white'
+            }`}>
               {metrics.followUpsTodayOrOverdue.length}
-            </span>
-            <span className="text-xs text-slate-500 dark:text-slate-400">
-              {metrics.followUpsTodayOrOverdue.length > 0 ? 'urgent candidate/client steps' : 'all clear'}
-            </span>
+            </div>
+            <div className="mt-1 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+              <span className={metrics.followUpsTodayOrOverdue.length > 0 ? 'text-amber-600 dark:text-amber-400 font-medium' : ''}>
+                {metrics.followUpsTodayOrOverdue.length > 0 ? 'Urgent candidate/client steps' : 'All caught up'}
+              </span>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium group-hover:underline">View →</span>
+            </div>
           </div>
         </div>
 

@@ -14,6 +14,7 @@ interface CloseWebsiteModalProps {
   isOpen: boolean;
   onClose: () => void;
   taskCount: number;
+  notesCount?: number;
   onExtractAgain: () => void;
 }
 
@@ -21,6 +22,7 @@ export const CloseWebsiteModal: React.FC<CloseWebsiteModalProps> = ({
   isOpen,
   onClose,
   taskCount,
+  notesCount = 0,
   onExtractAgain,
 }) => {
   const [attemptedClose, setAttemptedClose] = useState(false);
@@ -82,15 +84,23 @@ export const CloseWebsiteModal: React.FC<CloseWebsiteModalProps> = ({
           {/* Summary Box */}
           <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 space-y-2.5">
             <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">
-              <span className="font-medium">Total Tasks Exported:</span>
+              <span className="font-medium">Sheet 1 (HR Tasks):</span>
               <span className="font-bold font-mono-numbers text-slate-900 dark:text-white text-sm">
                 {taskCount} tasks
               </span>
             </div>
+            {notesCount > 0 && (
+              <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">
+                <span className="font-medium">Sheet 2 (Notes):</span>
+                <span className="font-bold font-mono-numbers text-amber-600 dark:text-amber-400 text-sm">
+                  {notesCount} standalone notes
+                </span>
+              </div>
+            )}
             <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">
               <span className="font-medium">File Format:</span>
               <span className="font-semibold text-slate-900 dark:text-white">
-                Microsoft Excel (.xlsx)
+                Multi-Sheet Excel (.xlsx)
               </span>
             </div>
             <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">

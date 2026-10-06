@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { HRTask, ExcelColumnMapping } from '../types/hrTask';
+import { HRTask, ExcelColumnMapping, KeepNote } from '../types/hrTask';
 import { formatTimeCompact } from '../utils/storage';
 import { 
   parseUploadedExcel, 
@@ -20,13 +20,14 @@ import {
   HelpCircle,
   RefreshCw,
   Download,
-  Sparkles
+  Sparkles,
+  StickyNote
 } from 'lucide-react';
 
 interface ExcelImportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onImportCompleted: (importedTasks: HRTask[], count: number) => void;
+  onImportCompleted: (importedTasks: HRTask[], count: number, importedNotes?: KeepNote[]) => void;
   existingTasks: HRTask[];
 }
 
@@ -40,6 +41,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [parsedData, setParsedData] = useState<ParsedSpreadsheet | null>(null);
+  const [includeImportedNotes, setIncludeImportedNotes] = useState<boolean>(true);
   
   // Custom column mapping state
   const [mapping, setMapping] = useState<ExcelColumnMapping>({
@@ -107,7 +109,10 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         importStrategy
       );
       const addedCount = newTasks.length - (importStrategy === 'update' ? existingTasks.length : 0);
-      onImportCompleted(newTasks, Math.max(addedCount, parsedData.rawRows.length));
+      const notesToImport = (includeImportedNotes && parsedData.parsedNotes && parsedData.parsedNotes.length > 0)
+        ? parsedData.parsedNotes
+        : undefined;
+      onImportCompleted(newTasks, Math.max(addedCount, parsedData.rawRows.length), notesToImport);
       onClose();
     } catch (err: any) {
       setErrorMsg(`Import failed: ${err.message || 'Unknown error'}`);
@@ -250,6 +255,39 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                   Choose another file
                 </button>
               </div>
+
+              {/* Detected Standalone Notes Sheet Card */}
+              {parsedData.hasNotesSheet && parsedData.parsedNotes && parsedData.parsedNotes.length > 0 && (
+                <div className="p-3.5 bg-amber-50/90 dark:bg-amber-950/40 rounded-xl border border-amber-200 dark:border-amber-800/70 flex items-center justify-between gap-3 animate-in fade-in">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-amber-200/80 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 flex items-center justify-center shrink-0">
+                      <StickyNote className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-xs font-bold text-amber-950 dark:text-amber-200">
+                          Separate Sheet Detected: "{parsedData.notesSheetName || 'Notes'}"
+                        </h4>
+                        <span className="px-1.5 py-0.2 bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200 rounded text-[10px] font-mono font-bold">
+                          Sheet 2
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-0.5">
+                        Found {parsedData.parsedNotes.length} Google Keep style notes, checklists & tags.
+                      </p>
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-amber-950 dark:text-amber-200 shrink-0 bg-white/80 dark:bg-slate-900/80 px-2.5 py-1.5 rounded-lg border border-amber-200 dark:border-amber-800/60">
+                    <input
+                      type="checkbox"
+                      checked={includeImportedNotes}
+                      onChange={(e) => setIncludeImportedNotes(e.target.checked)}
+                      className="rounded text-amber-600 focus:ring-amber-500"
+                    />
+                    <span>Import Notes</span>
+                  </label>
+                </div>
+              )}
 
               {/* Step 2: Column Mapping */}
               <div>
@@ -548,10 +586,14 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
             <button
               type="button"
               onClick={handleConfirmImport}
-              className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-semibold text-white bg-slate-900 dark:bg-indigo-600 rounded-lg hover:bg-slate-800 dark:hover:bg-indigo-700 shadow-xs cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-5 py-2.5 text-xs font-semibold text-white bg-slate-900 dark:bg-indigo-600 rounded-xl hover:bg-slate-800 dark:hover:bg-indigo-700 shadow-xs cursor-pointer"
             >
               <Check className="w-3.5 h-3.5" />
-              <span>Import {parsedData.rawRows.length} Tasks</span>
+              <span>
+                {includeImportedNotes && parsedData.hasNotesSheet && parsedData.parsedNotes && parsedData.parsedNotes.length > 0
+                  ? `Import ${parsedData.rawRows.length} Tasks + ${parsedData.parsedNotes.length} Notes`
+                  : `Import ${parsedData.rawRows.length} Tasks`}
+              </span>
             </button>
           )}
         </div>

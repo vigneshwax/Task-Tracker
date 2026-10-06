@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { HRTask, ViewMode, TaskFilterState, TaskStatus, DailyNoteData, UserProfileSettings, KeepNote } from './types/hrTask';
 import { 
   loadTasksFromStorage, 
@@ -16,6 +16,21 @@ import { getStoredCategories, saveStoredCategories } from './utils/categories';
 import { downloadExcelTemplate, autoExtractExcelOnExit } from './utils/excel';
 import { getInitialTheme, applyTheme, ThemeMode } from './utils/theme';
 import { loadKeepNotesFromStorage, saveKeepNotesToStorage } from './utils/keepNotesStorage';
+import { 
+  getStoredSheetsUrl, 
+  getStoredSyncMode, 
+  getStoredAutoSyncEnabled, 
+  getStoredAutoPullEnabled,
+  hasConnectedCloudDatabase, 
+  isCloudConfigured,
+  autoSyncDatabaseToCloud,
+  autoPullDatabaseFromCloud,
+  hasGoogleSheetDataChanged,
+  reconcilePulledTasks,
+  reconcilePulledNotes,
+  pushDatabaseToGoogleSheet, 
+  simulatedPushToSheet 
+} from './utils/googleSheetsDatabase';
 
 // Components
 import { Header } from './components/Header';
@@ -36,6 +51,7 @@ import { ExcelExportModal } from './components/ExcelExportModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { FollowUpSection } from './components/FollowUpSection';
 import { CloseWebsiteModal } from './components/CloseWebsiteModal';
+import { GoogleSheetsDatabaseModal } from './components/GoogleSheetsDatabaseModal';
 
 import { BellRing, CheckCircle2, ChevronRight, X, Sparkles } from 'lucide-react';
 
@@ -128,14 +144,29 @@ export default function App() {
 
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isGoogleSheetsModalOpen, setIsGoogleSheetsModalOpen] = useState(false);
   const [isCloseWebsiteModalOpen, setIsCloseWebsiteModalOpen] = useState(false);
   const [showFollowUpBanner, setShowFollowUpBanner] = useState(false);
   const [isTableFullScreen, setIsTableFullScreen] = useState(false);
 
+  // Success Toast notification
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = useCallback((msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 3500);
+  }, []);
+
   // Preference: Auto-extract Excel on exit/close
+  // If user has added API Key or Apps Script (cloud connected), auto-download on refresh/exit is OFF!
   const [autoExtractOnClose, setAutoExtractOnClose] = useState<boolean>(() => {
+    if (hasConnectedCloudDatabase() || isCloudConfigured()) {
+      return false; // Turn off auto-download on refresh/exit when API key or Apps Script is configured
+    }
     const saved = localStorage.getItem('hr_auto_extract_on_close');
-    return saved !== null ? saved === 'true' : true;
+    return saved !== null ? saved === 'true' : false;
   });
 
   const handleToggleAutoExtractOnClose = useCallback(() => {
@@ -145,7 +176,13 @@ export default function App() {
       showToast(next ? 'Auto-extract Excel on exit enabled' : 'Auto-extract Excel on exit disabled');
       return next;
     });
-  }, []);
+  }, [showToast]);
+
+  const handleCloudConfigured = useCallback(() => {
+    setAutoExtractOnClose(false);
+    localStorage.setItem('hr_auto_extract_on_close', 'false');
+    showToast('Auto-download on refresh turned OFF · Auto-sync to Google Sheet enabled');
+  }, [showToast]);
 
   // Delete Confirm State
   const [confirmDeleteModal, setConfirmDeleteModal] = useState<{
@@ -160,20 +197,13 @@ export default function App() {
     action: () => {},
   });
 
-  // Success Toast notification
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  const showToast = useCallback((msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => {
-      setToastMessage(null);
-    }, 3500);
-  }, []);
-
   // Google Keep Style Notes State
   const [keepNotes, setKeepNotes] = useState<KeepNote[]>(() => loadKeepNotesFromStorage());
+  const lastLocalEditTime = useRef<number>(0);
+  const lastPullAttemptTime = useRef<number>(0);
 
   const handleAddKeepNote = useCallback((newNoteData: Omit<KeepNote, 'id' | 'createdAt' | 'updatedAt'>) => {
+    lastLocalEditTime.current = Date.now();
     const newNote: KeepNote = {
       ...newNoteData,
       id: `keep-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
@@ -188,6 +218,7 @@ export default function App() {
   }, []);
 
   const handleUpdateKeepNote = useCallback((updatedNote: KeepNote) => {
+    lastLocalEditTime.current = Date.now();
     setKeepNotes(prev => {
       const updated = prev.map(n => n.id === updatedNote.id ? updatedNote : n);
       saveKeepNotesToStorage(updated);
@@ -196,6 +227,7 @@ export default function App() {
   }, []);
 
   const handleDeleteKeepNote = useCallback((id: string) => {
+    lastLocalEditTime.current = Date.now();
     setKeepNotes(prev => {
       const updated = prev.filter(n => n.id !== id);
       saveKeepNotesToStorage(updated);
@@ -204,11 +236,13 @@ export default function App() {
   }, []);
 
   const handleRestoreKeepNotes = useCallback((restored: KeepNote[]) => {
+    lastLocalEditTime.current = Date.now();
     setKeepNotes(restored);
     saveKeepNotesToStorage(restored);
   }, []);
 
   const handleClearAllKeepNotes = useCallback(() => {
+    lastLocalEditTime.current = Date.now();
     setKeepNotes([]);
     saveKeepNotesToStorage([]);
     showToast('Cleared all standalone notes');
@@ -216,9 +250,17 @@ export default function App() {
 
   // Save tasks on modification
   const updateTasks = useCallback((newTasks: HRTask[]) => {
+    lastLocalEditTime.current = Date.now();
     setTasks(newTasks);
     saveTasksToStorage(newTasks);
   }, []);
+
+  // Apply full database load from Google Sheets (both tasks and standalone notes)
+  const handleApplyGoogleSheetsData = useCallback((pulledTasks: HRTask[], pulledNotes: KeepNote[]) => {
+    updateTasks(pulledTasks);
+    setKeepNotes(pulledNotes);
+    saveKeepNotesToStorage(pulledNotes);
+  }, [updateTasks]);
 
   // Ensure any existing tasks always have proper AM/PM formatted times
   useEffect(() => {
@@ -512,12 +554,191 @@ export default function App() {
     setSelectedTaskIds([]);
   }, []);
 
-  // Before closing the page / tab: automatically extract Excel spreadsheet
+  // Auto-sync to Google Sheet whenever tasks or notes are updated
+  const isInitialMount = useRef(true);
+  const autoSyncTimerRef = useRef<any>(null);
+  const [isAutoSyncing, setIsAutoSyncing] = useState(false);
+  const [isAutoPulling, setIsAutoPulling] = useState(false);
+  const [lastAutoSyncTime, setLastAutoSyncTime] = useState<string | null>(null);
+  const [lastPullTime, setLastPullTime] = useState<string | null>(null);
+
+  // Keep live references to prevent stale closures and avoid circular hook dependency thrashing
+  const tasksRef = useRef<HRTask[]>(tasks);
+  tasksRef.current = tasks;
+  const keepNotesRef = useRef<KeepNote[]>(keepNotes);
+  keepNotesRef.current = keepNotes;
+  const isIncomingCloudUpdateRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    // Skip on first mount to avoid pushing immediately on page load
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+
+    // Skip auto-sync push if this state change was just pulled from Google Sheet
+    if (isIncomingCloudUpdateRef.current) {
+      isIncomingCloudUpdateRef.current = false;
+      return;
+    }
+
+    const isAutoSyncEnabled = getStoredAutoSyncEnabled();
+    if (!isAutoSyncEnabled) return;
+
+    const hasCloud = hasConnectedCloudDatabase() || isCloudConfigured();
+    if (!hasCloud) {
+      return;
+    }
+
+    if (autoSyncTimerRef.current) {
+      clearTimeout(autoSyncTimerRef.current);
+    }
+
+    autoSyncTimerRef.current = setTimeout(async () => {
+      setIsAutoSyncing(true);
+      try {
+        const res = await autoSyncDatabaseToCloud(tasks, keepNotes);
+        if (res.success) {
+          const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          setLastAutoSyncTime(timeStr);
+          showToast(`Auto-synced to Google Sheet at ${timeStr}`);
+        } else if (res.message && !res.message.includes('No active Google Sheet')) {
+          console.warn('Auto-sync notice:', res.message);
+        }
+      } catch (err) {
+        console.error('Auto-sync error:', err);
+      } finally {
+        setIsAutoSyncing(false);
+      }
+    }, 1200);
+
+    return () => {
+      if (autoSyncTimerRef.current) {
+        clearTimeout(autoSyncTimerRef.current);
+      }
+    };
+  }, [tasks, keepNotes, showToast]);
+
+  // Pull latest data from Google Sheet to reflect any spreadsheet changes in the app
+  const handlePullFromGoogleSheets = useCallback(async (silent = false) => {
+    const hasCloud = hasConnectedCloudDatabase() || isCloudConfigured();
+    if (!hasCloud) {
+      if (!silent) {
+        showToast('Please connect your Google Sheet in the Database Center first');
+      }
+      return;
+    }
+
+    // Guard: Don't pull if local changes were made in the last 2.5 seconds
+    if (Date.now() - lastLocalEditTime.current < 2500) {
+      return;
+    }
+
+    // Guard: Don't pull if already pulling or pushing
+    if (isAutoPulling || isAutoSyncing) {
+      return;
+    }
+
+    lastPullAttemptTime.current = Date.now();
+    setIsAutoPulling(true);
+
+    try {
+      const res = await autoPullDatabaseFromCloud();
+      if (res.success && (res.tasks || res.notes)) {
+        const rawTasks = res.tasks || [];
+        const rawNotes = res.notes || [];
+
+        // Reconcile incoming tasks and notes with existing to preserve stable IDs
+        const reconciledTasks = reconcilePulledTasks(tasksRef.current, rawTasks);
+        const reconciledNotes = reconcilePulledNotes(keepNotesRef.current, rawNotes);
+
+        // Check if data actually changed in Google Sheet
+        const changed = hasGoogleSheetDataChanged(tasksRef.current, reconciledTasks, keepNotesRef.current, reconciledNotes);
+        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        setLastPullTime(timeStr);
+
+        if (changed) {
+          // Flag that this update came from cloud so it does not trigger an immediate push back
+          isIncomingCloudUpdateRef.current = true;
+          if (reconciledTasks.length > 0 || tasksRef.current.length === 0) {
+            setTasks(reconciledTasks);
+            saveTasksToStorage(reconciledTasks);
+          }
+          if (reconciledNotes.length > 0 || keepNotesRef.current.length === 0) {
+            setKeepNotes(reconciledNotes);
+            saveKeepNotesToStorage(reconciledNotes);
+          }
+          showToast(`Reflected changes from Google Sheet (${reconciledTasks.length} tasks synced)`);
+        } else if (!silent) {
+          showToast(`Google Sheet is up to date (${reconciledTasks.length} tasks in sync)`);
+        }
+      } else if (!silent && res.message) {
+        showToast(res.message);
+      }
+    } catch (err) {
+      if (!silent) {
+        console.error('Failed to pull from Google Sheet:', err);
+        showToast('Could not fetch updates from Google Sheet');
+      }
+    } finally {
+      setIsAutoPulling(false);
+    }
+  }, [showToast, isAutoPulling, isAutoSyncing]);
+
+  // Trigger 1: On initial app mount, fetch latest data from Google Sheet so offline edits reflect immediately
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (hasConnectedCloudDatabase() || isCloudConfigured()) {
+        handlePullFromGoogleSheets(true);
+      }
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [handlePullFromGoogleSheets]);
+
+  // Trigger 2: When user returns/switches back to this tab after editing Google Sheet
+  useEffect(() => {
+    const handleFocusOrVisible = () => {
+      if (document.visibilityState === 'visible') {
+        const now = Date.now();
+        if (now - lastPullAttemptTime.current > 1200 && (hasConnectedCloudDatabase() || isCloudConfigured())) {
+          handlePullFromGoogleSheets(true);
+        }
+      }
+    };
+
+    window.addEventListener('focus', handleFocusOrVisible);
+    document.addEventListener('visibilitychange', handleFocusOrVisible);
+    return () => {
+      window.removeEventListener('focus', handleFocusOrVisible);
+      document.removeEventListener('visibilitychange', handleFocusOrVisible);
+    };
+  }, [handlePullFromGoogleSheets]);
+
+  // Trigger 3: Periodic background polling every 10 seconds while active
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const isAutoPullEnabled = getStoredAutoPullEnabled();
+      if (!isAutoPullEnabled) return;
+      if (!hasConnectedCloudDatabase() && !isCloudConfigured()) return;
+      if (Date.now() - lastLocalEditTime.current < 3000) return;
+      handlePullFromGoogleSheets(true);
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [handlePullFromGoogleSheets]);
+
+  // Before closing the page / tab: automatically extract Excel spreadsheet ONLY if enabled and cloud is NOT connected
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (autoExtractOnClose && tasks.length > 0) {
+      // If user has API Key or Apps Script or Cloud Database connected, do not auto-download on refresh
+      const isCloudActive = hasConnectedCloudDatabase() || isCloudConfigured();
+      if (isCloudActive || !autoExtractOnClose) {
+        // Auto-download on refresh/reload is completely OFF!
+        return;
+      }
+      if (tasks.length > 0 || keepNotes.length > 0) {
         try {
-          autoExtractExcelOnExit(tasks);
+          autoExtractExcelOnExit(tasks, keepNotes);
         } catch (err) {
           console.error('Failed to auto-extract Excel on beforeunload', err);
         }
@@ -531,16 +752,16 @@ export default function App() {
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [tasks, autoExtractOnClose]);
+  }, [tasks, keepNotes, autoExtractOnClose]);
 
   // Handler for explicit "Close Website" action
   const handleCloseWebsite = useCallback(() => {
-    const success = autoExtractExcelOnExit(tasks);
+    const success = autoExtractExcelOnExit(tasks, keepNotes);
     if (success) {
       showToast('Excel spreadsheet extracted & saved to Downloads!');
     }
     setIsCloseWebsiteModalOpen(true);
-  }, [tasks, showToast]);
+  }, [tasks, keepNotes, showToast]);
 
   // Filter tasks for export
   const filteredTasksForExport = useMemo(() => {
@@ -573,7 +794,8 @@ export default function App() {
         }}
         onOpenImport={() => setIsImportModalOpen(true)}
         onOpenExport={() => setIsExportModalOpen(true)}
-        onDownloadTemplate={downloadExcelTemplate}
+        onDownloadTemplate={() => downloadExcelTemplate(keepNotes)}
+        onOpenGoogleSheetsDatabase={() => setIsGoogleSheetsModalOpen(true)}
         followUpAlertCount={followUpAlertCount}
         onOpenFollowUpBanner={() => setShowFollowUpBanner(!showFollowUpBanner)}
         currentTheme={theme}
@@ -581,6 +803,10 @@ export default function App() {
         onCloseWebsite={handleCloseWebsite}
         userName={userProfile.name}
         notesCount={keepNotes.length}
+        isAutoSyncing={isAutoSyncing}
+        isAutoPulling={isAutoPulling}
+        hasCloudConnected={hasConnectedCloudDatabase()}
+        onSyncFromGoogleSheet={() => handlePullFromGoogleSheets(false)}
       />
 
       {/* App Workspace Body */}
@@ -620,6 +846,11 @@ export default function App() {
             onViewTaskDetail={setTaskForDetail}
             userName={userProfile.name}
             userRole={userProfile.role}
+            isAutoSyncing={isAutoSyncing}
+            isAutoPulling={isAutoPulling}
+            lastPullTime={lastPullTime}
+            hasCloudConnected={hasConnectedCloudDatabase()}
+            onSyncFromGoogleSheet={() => handlePullFromGoogleSheets(false)}
           />
         )}
 
@@ -839,6 +1070,7 @@ export default function App() {
             autoExtractOnClose={autoExtractOnClose}
             onToggleAutoExtractOnClose={handleToggleAutoExtractOnClose}
             onCloseWebsite={handleCloseWebsite}
+            onOpenGoogleSheetsDatabase={() => setIsGoogleSheetsModalOpen(true)}
             keepNotes={keepNotes}
             onRestoreKeepNotes={handleRestoreKeepNotes}
             onClearAllKeepNotes={handleClearAllKeepNotes}
@@ -886,9 +1118,18 @@ export default function App() {
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
         existingTasks={tasks}
-        onImportCompleted={(newTasks, count) => {
+        onImportCompleted={(newTasks, count, importedNotes) => {
           updateTasks(newTasks);
-          showToast(`Successfully imported ${count} tasks from spreadsheet!`);
+          if (importedNotes && importedNotes.length > 0) {
+            setKeepNotes(prev => {
+              const merged = [...importedNotes, ...prev];
+              saveKeepNotesToStorage(merged);
+              return merged;
+            });
+            showToast(`Imported ${count} tasks and ${importedNotes.length} notes from spreadsheet!`);
+          } else {
+            showToast(`Successfully imported ${count} tasks from spreadsheet!`);
+          }
         }}
       />
 
@@ -899,6 +1140,7 @@ export default function App() {
         allTasks={tasks}
         filteredTasks={filteredTasksForExport}
         selectedTaskIds={selectedTaskIds}
+        notes={keepNotes}
       />
 
       {/* Confirmation Modal */}
@@ -917,7 +1159,23 @@ export default function App() {
         isOpen={isCloseWebsiteModalOpen}
         onClose={() => setIsCloseWebsiteModalOpen(false)}
         taskCount={tasks.length}
+        notesCount={keepNotes.length}
         onExtractAgain={handleCloseWebsite}
+      />
+
+      {/* Google Sheets Database Center Modal */}
+      <GoogleSheetsDatabaseModal
+        isOpen={isGoogleSheetsModalOpen}
+        onClose={() => setIsGoogleSheetsModalOpen(false)}
+        tasks={tasks}
+        notes={keepNotes}
+        onApplyPulledData={handleApplyGoogleSheetsData}
+        showToast={showToast}
+        onCloudConfigured={handleCloudConfigured}
+        isAutoSyncing={isAutoSyncing}
+        lastAutoSyncTime={lastAutoSyncTime}
+        isAutoPulling={isAutoPulling}
+        lastPullTime={lastPullTime}
       />
 
       {/* Footer */}

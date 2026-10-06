@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { ThemeMode } from '../utils/theme';
 import { TaskPriority, UserProfileSettings, HRTask, KeepNote } from '../types/hrTask';
+import { exportNotesToExcel } from '../utils/excel';
+import { hasConnectedCloudDatabase, isCloudConfigured } from '../utils/googleSheetsDatabase';
 import { 
   Sun, 
   Moon, 
@@ -20,7 +22,8 @@ import {
   CheckCircle2,
   Clock,
   FileSpreadsheet,
-  FileText
+  FileText,
+  ArrowRight
 } from 'lucide-react';
 
 interface SettingsViewProps {
@@ -39,6 +42,7 @@ interface SettingsViewProps {
   autoExtractOnClose?: boolean;
   onToggleAutoExtractOnClose?: () => void;
   onCloseWebsite?: () => void;
+  onOpenGoogleSheetsDatabase?: () => void;
   keepNotes?: KeepNote[];
   onRestoreKeepNotes?: (notes: KeepNote[]) => void;
   onClearAllKeepNotes?: () => void;
@@ -61,6 +65,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   autoExtractOnClose = true,
   onToggleAutoExtractOnClose,
   onCloseWebsite,
+  onOpenGoogleSheetsDatabase,
   keepNotes = [],
   onRestoreKeepNotes,
   onClearAllKeepNotes,
@@ -599,13 +604,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
                     Download all {keepNotes.length} standalone notes and checklists as a portable backup.
                   </p>
-                  <button
-                    type="button"
-                    onClick={handleExportNotesBackup}
-                    className="px-3.5 py-1.5 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors cursor-pointer"
-                  >
-                    Export Notes
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleExportNotesBackup}
+                      className="px-3.5 py-1.5 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Export JSON
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        exportNotesToExcel(keepNotes);
+                        showToast('Notes spreadsheet exported to Excel (.xlsx)!');
+                      }}
+                      className="px-3.5 py-1.5 text-xs font-semibold text-amber-900 dark:text-amber-200 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/60 dark:hover:bg-amber-900 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <span>Export Excel</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Notes Restore Card */}
@@ -632,6 +650,36 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </div>
             </div>
 
+            {/* Google Sheets Cloud Database Center Card */}
+            {onOpenGoogleSheetsDatabase && (
+              <div className="p-4 rounded-xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/40 dark:bg-emerald-950/20 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 shrink-0">
+                      <Database className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
+                        Google Sheets Cloud Database (Two-Way Sync)
+                      </h4>
+                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                        Use your Google Sheet as a database to push and pull your tasks and notes anytime without needing OAuth logins.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={onOpenGoogleSheetsDatabase}
+                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-xs transition-colors cursor-pointer shrink-0 shadow-xs flex items-center justify-center gap-1.5"
+                  >
+                    <span>Open Database Center</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Auto Excel Extraction on Exit Setting */}
             <div className="p-4 rounded-xl border border-emerald-200/90 dark:border-emerald-900/60 bg-emerald-50/50 dark:bg-emerald-950/20 space-y-3">
               <div className="flex items-start justify-between gap-3">
@@ -640,11 +688,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     <FileSpreadsheet className="w-4 h-4" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
-                      Auto-Extract Excel on Close
-                    </h4>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
+                        Auto-Extract Excel on Close
+                      </h4>
+                      {(hasConnectedCloudDatabase() || isCloudConfigured()) && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                          Auto-Sync Active · Refresh Download: OFF
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                      Automatically downloads a complete updated Excel (.xlsx) spreadsheet whenever you click "Close Website" or close/leave the browser tab.
+                      {(hasConnectedCloudDatabase() || isCloudConfigured())
+                        ? 'Because Google Sheets (API Key / Apps Script) is connected, auto-download on refresh is OFF. Your data automatically syncs directly to your spreadsheet on every update.'
+                        : 'Automatically downloads a complete updated Excel (.xlsx) spreadsheet whenever you click "Close Website" or close/leave the browser tab.'}
                     </p>
                   </div>
                 </div>
