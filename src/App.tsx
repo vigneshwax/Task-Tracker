@@ -26,8 +26,6 @@ import {
   autoSyncDatabaseToCloud,
   autoPullDatabaseFromCloud,
   hasGoogleSheetDataChanged,
-  reconcilePulledTasks,
-  reconcilePulledNotes,
   pushDatabaseToGoogleSheet, 
   simulatedPushToSheet 
 } from './utils/googleSheetsDatabase';
@@ -562,23 +560,10 @@ export default function App() {
   const [lastAutoSyncTime, setLastAutoSyncTime] = useState<string | null>(null);
   const [lastPullTime, setLastPullTime] = useState<string | null>(null);
 
-  // Keep live references to prevent stale closures and avoid circular hook dependency thrashing
-  const tasksRef = useRef<HRTask[]>(tasks);
-  tasksRef.current = tasks;
-  const keepNotesRef = useRef<KeepNote[]>(keepNotes);
-  keepNotesRef.current = keepNotes;
-  const isIncomingCloudUpdateRef = useRef<boolean>(false);
-
   useEffect(() => {
     // Skip on first mount to avoid pushing immediately on page load
     if (isInitialMount.current) {
       isInitialMount.current = false;
-      return;
-    }
-
-    // Skip auto-sync push if this state change was just pulled from Google Sheet
-    if (isIncomingCloudUpdateRef.current) {
-      isIncomingCloudUpdateRef.current = false;
       return;
     }
 
@@ -629,8 +614,8 @@ export default function App() {
       return;
     }
 
-    // Guard: Don't pull if local changes were made in the last 2.5 seconds
-    if (Date.now() - lastLocalEditTime.current < 2500) {
+    // Guard: Don't pull if local changes were made in the last 3.5 seconds
+    if (Date.now() - lastLocalEditTime.current < 3500) {
       return;
     }
 
@@ -645,32 +630,26 @@ export default function App() {
     try {
       const res = await autoPullDatabaseFromCloud();
       if (res.success && (res.tasks || res.notes)) {
-        const rawTasks = res.tasks || [];
-        const rawNotes = res.notes || [];
-
-        // Reconcile incoming tasks and notes with existing to preserve stable IDs
-        const reconciledTasks = reconcilePulledTasks(tasksRef.current, rawTasks);
-        const reconciledNotes = reconcilePulledNotes(keepNotesRef.current, rawNotes);
+        const pulledTasks = res.tasks || [];
+        const pulledNotes = res.notes || [];
 
         // Check if data actually changed in Google Sheet
-        const changed = hasGoogleSheetDataChanged(tasksRef.current, reconciledTasks, keepNotesRef.current, reconciledNotes);
+        const changed = hasGoogleSheetDataChanged(tasks, pulledTasks, keepNotes, pulledNotes);
         const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         setLastPullTime(timeStr);
 
         if (changed) {
-          // Flag that this update came from cloud so it does not trigger an immediate push back
-          isIncomingCloudUpdateRef.current = true;
-          if (reconciledTasks.length > 0 || tasksRef.current.length === 0) {
-            setTasks(reconciledTasks);
-            saveTasksToStorage(reconciledTasks);
+          if (pulledTasks.length > 0 || tasks.length === 0) {
+            setTasks(pulledTasks);
+            saveTasksToStorage(pulledTasks);
           }
-          if (reconciledNotes.length > 0 || keepNotesRef.current.length === 0) {
-            setKeepNotes(reconciledNotes);
-            saveKeepNotesToStorage(reconciledNotes);
+          if (pulledNotes.length > 0 || keepNotes.length === 0) {
+            setKeepNotes(pulledNotes);
+            saveKeepNotesToStorage(pulledNotes);
           }
-          showToast(`Reflected changes from Google Sheet (${reconciledTasks.length} tasks synced)`);
+          showToast(`Reflected changes from Google Sheet (${pulledTasks.length} tasks, ${pulledNotes.length} notes)`);
         } else if (!silent) {
-          showToast(`Google Sheet is up to date (${reconciledTasks.length} tasks in sync)`);
+          showToast(`Google Sheet is up to date (${pulledTasks.length} tasks synced)`);
         }
       } else if (!silent && res.message) {
         showToast(res.message);
@@ -683,7 +662,7 @@ export default function App() {
     } finally {
       setIsAutoPulling(false);
     }
-  }, [showToast, isAutoPulling, isAutoSyncing]);
+  }, [tasks, keepNotes, isAutoPulling, isAutoSyncing, showToast]);
 
   // Trigger 1: On initial app mount, fetch latest data from Google Sheet so offline edits reflect immediately
   useEffect(() => {
@@ -700,7 +679,7 @@ export default function App() {
     const handleFocusOrVisible = () => {
       if (document.visibilityState === 'visible') {
         const now = Date.now();
-        if (now - lastPullAttemptTime.current > 1200 && (hasConnectedCloudDatabase() || isCloudConfigured())) {
+        if (now - lastPullAttemptTime.current > 5000 && (hasConnectedCloudDatabase() || isCloudConfigured())) {
           handlePullFromGoogleSheets(true);
         }
       }
@@ -714,15 +693,15 @@ export default function App() {
     };
   }, [handlePullFromGoogleSheets]);
 
-  // Trigger 3: Periodic background polling every 10 seconds while active
+  // Trigger 3: Periodic background polling every 25 seconds while active
   useEffect(() => {
     const interval = setInterval(() => {
       const isAutoPullEnabled = getStoredAutoPullEnabled();
       if (!isAutoPullEnabled) return;
       if (!hasConnectedCloudDatabase() && !isCloudConfigured()) return;
-      if (Date.now() - lastLocalEditTime.current < 3000) return;
+      if (Date.now() - lastLocalEditTime.current < 4000) return;
       handlePullFromGoogleSheets(true);
-    }, 10000);
+    }, 25000);
 
     return () => clearInterval(interval);
   }, [handlePullFromGoogleSheets]);
@@ -846,11 +825,6 @@ export default function App() {
             onViewTaskDetail={setTaskForDetail}
             userName={userProfile.name}
             userRole={userProfile.role}
-            isAutoSyncing={isAutoSyncing}
-            isAutoPulling={isAutoPulling}
-            lastPullTime={lastPullTime}
-            hasCloudConnected={hasConnectedCloudDatabase()}
-            onSyncFromGoogleSheet={() => handlePullFromGoogleSheets(false)}
           />
         )}
 

@@ -706,14 +706,11 @@ export function hasGoogleSheetDataChanged(
   if (currentTasks.length !== pulledTasks.length) return true;
   if (currentNotes.length !== pulledNotes.length) return true;
 
-  // Check tasks for modifications (title, status, priority, category, notes, time, date, followUpDate, assignedTo, description)
+  // Check tasks for modifications (title, status, priority, category, notes, time, date, followUpDate, assignedTo)
   for (let i = 0; i < pulledTasks.length; i++) {
     const pt = pulledTasks[i];
-    // Find corresponding task by ID, by row index if equal length, or by title
-    const ct = currentTasks.find(t => t.id === pt.id) ||
-               (currentTasks.length === pulledTasks.length ? currentTasks[i] : undefined) ||
-               currentTasks.find(t => t.title.trim().toLowerCase() === pt.title.trim().toLowerCase() && t.date === pt.date) ||
-               currentTasks.find(t => t.title.trim().toLowerCase() === pt.title.trim().toLowerCase());
+    // Find corresponding task by ID or by title + date
+    const ct = currentTasks.find(t => t.id === pt.id || (t.title.trim() === pt.title.trim() && t.date === pt.date));
     if (!ct) return true;
     if (
       ct.title.trim() !== pt.title.trim() ||
@@ -721,8 +718,7 @@ export function hasGoogleSheetDataChanged(
       ct.priority !== pt.priority ||
       ct.category !== pt.category ||
       ct.time !== pt.time ||
-      (ct.date || '') !== (pt.date || '') ||
-      (ct.assignedTo || '').trim() !== (pt.assignedTo || '').trim() ||
+      (ct.assignedTo || '') !== (pt.assignedTo || '') ||
       (ct.notes || '').trim() !== (pt.notes || '').trim() ||
       (ct.followUpDate || '') !== (pt.followUpDate || '') ||
       (ct.description || '').trim() !== (pt.description || '').trim()
@@ -734,9 +730,7 @@ export function hasGoogleSheetDataChanged(
   // Check notes for modifications
   for (let j = 0; j < pulledNotes.length; j++) {
     const pn = pulledNotes[j];
-    const cn = currentNotes.find(n => n.id === pn.id) ||
-               (currentNotes.length === pulledNotes.length ? currentNotes[j] : undefined) ||
-               currentNotes.find(n => n.title.trim().toLowerCase() === pn.title.trim().toLowerCase());
+    const cn = currentNotes.find(n => n.id === pn.id || n.title.trim() === pn.title.trim());
     if (!cn) return true;
     if (
       cn.title.trim() !== pn.title.trim() ||
@@ -750,95 +744,6 @@ export function hasGoogleSheetDataChanged(
   }
 
   return false;
-}
-
-/**
- * Reconciles incoming pulled tasks with existing local tasks to preserve stable IDs,
- * keeping table selections, open modal dialogs, and React keys stable while updating values.
- */
-export function reconcilePulledTasks(currentTasks: HRTask[], incomingTasks: HRTask[]): HRTask[] {
-  return incomingTasks.map((inc, index) => {
-    // 1. Direct ID match
-    const matchById = currentTasks.find(c => c.id === inc.id);
-    if (matchById) {
-      return {
-        ...inc,
-        id: matchById.id,
-        createdAt: matchById.createdAt,
-        updatedAt: Date.now()
-      };
-    }
-
-    // 2. Exact match by title and date
-    const matchByTitleDate = currentTasks.find(c => c.title.trim().toLowerCase() === inc.title.trim().toLowerCase() && c.date === inc.date);
-    if (matchByTitleDate) {
-      return {
-        ...inc,
-        id: matchByTitleDate.id,
-        createdAt: matchByTitleDate.createdAt,
-        updatedAt: Date.now()
-      };
-    }
-
-    // 3. Positional match if count aligns
-    if (currentTasks.length === incomingTasks.length && currentTasks[index]) {
-      return {
-        ...inc,
-        id: currentTasks[index].id,
-        createdAt: currentTasks[index].createdAt,
-        updatedAt: Date.now()
-      };
-    }
-
-    // 4. Match by title alone
-    const matchByTitle = currentTasks.find(c => c.title.trim().toLowerCase() === inc.title.trim().toLowerCase());
-    if (matchByTitle) {
-      return {
-        ...inc,
-        id: matchByTitle.id,
-        createdAt: matchByTitle.createdAt,
-        updatedAt: Date.now()
-      };
-    }
-
-    // 5. Newly added row from Google Sheet
-    return inc;
-  });
-}
-
-/**
- * Reconciles incoming pulled notes with existing local notes
- */
-export function reconcilePulledNotes(currentNotes: KeepNote[], incomingNotes: KeepNote[]): KeepNote[] {
-  return incomingNotes.map((inc, index) => {
-    const matchById = currentNotes.find(c => c.id === inc.id);
-    if (matchById) {
-      return {
-        ...inc,
-        id: matchById.id,
-        createdAt: matchById.createdAt,
-        updatedAt: Date.now()
-      };
-    }
-    const matchByTitle = currentNotes.find(c => c.title.trim().toLowerCase() === inc.title.trim().toLowerCase());
-    if (matchByTitle) {
-      return {
-        ...inc,
-        id: matchByTitle.id,
-        createdAt: matchByTitle.createdAt,
-        updatedAt: Date.now()
-      };
-    }
-    if (currentNotes.length === incomingNotes.length && currentNotes[index]) {
-      return {
-        ...inc,
-        id: currentNotes[index].id,
-        createdAt: currentNotes[index].createdAt,
-        updatedAt: Date.now()
-      };
-    }
-    return inc;
-  });
 }
 
 /**
@@ -937,9 +842,9 @@ export async function pullFromGoogleSheetsApi(
   }
 
   try {
-    // 1. Fetch metadata or sheet names (always fresh, no-store)
-    const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties.title&key=${apiKey}&_t=${Date.now()}`;
-    const metaRes = await fetch(metaUrl, { cache: 'no-store' });
+    // 1. Fetch metadata or sheet names
+    const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties.title&key=${apiKey}`;
+    const metaRes = await fetch(metaUrl);
 
     if (metaRes.status === 404) {
       return {
@@ -973,9 +878,9 @@ export async function pullFromGoogleSheetsApi(
     const taskSheetName = sheetTitles.find(t => t.toLowerCase() === 'hr tasks' || t.toLowerCase() === 'tasks') || sheetTitles[0] || 'Sheet1';
     const notesSheetName = sheetTitles.find(t => t.toLowerCase() === 'notes' || t.toLowerCase() === 'hr notes' || t.toLowerCase() === 'keep notes');
 
-    // 2. Fetch Tasks values (fresh timestamp, no-store)
-    const tasksUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(taskSheetName)}!A1:Z1000?key=${apiKey}&_t=${Date.now()}`;
-    const tasksRes = await fetch(tasksUrl, { cache: 'no-store' });
+    // 2. Fetch Tasks values
+    const tasksUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(taskSheetName)}!A1:Z1000?key=${apiKey}`;
+    const tasksRes = await fetch(tasksUrl);
     const tasksData = tasksRes.ok ? await tasksRes.json() : { values: [] };
     const taskRows: any[][] = tasksData.values || [];
 
@@ -999,7 +904,7 @@ export async function pullFromGoogleSheetsApi(
         if (!titleVal) continue;
 
         parsedTasks.push({
-          id: `task-api-${i}`,
+          id: `task-api-${Date.now()}-${i}`,
           date: String(row[colDate] || new Date().toISOString().split('T')[0]),
           time: String(row[colTime] || '09:00 AM'),
           title: titleVal,
@@ -1016,11 +921,11 @@ export async function pullFromGoogleSheetsApi(
       }
     }
 
-    // 3. Fetch Notes values if sheet exists (fresh timestamp, no-store)
+    // 3. Fetch Notes values if sheet exists
     const parsedNotes: KeepNote[] = [];
     if (notesSheetName) {
-      const notesUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(notesSheetName)}!A1:Z1000?key=${apiKey}&_t=${Date.now()}`;
-      const notesRes = await fetch(notesUrl, { cache: 'no-store' });
+      const notesUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(notesSheetName)}!A1:Z1000?key=${apiKey}`;
+      const notesRes = await fetch(notesUrl);
       if (notesRes.ok) {
         const notesData = await notesRes.json();
         const noteRows: any[][] = notesData.values || [];
@@ -1218,8 +1123,6 @@ export async function pullDatabaseFromGoogleSheet(
     const fetchUrl = `${cleanUrl}${separator}_t=${Date.now()}`;
     const response = await fetch(fetchUrl, {
       method: 'GET',
-      headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
-      cache: 'no-store',
       redirect: 'follow',
     });
 
