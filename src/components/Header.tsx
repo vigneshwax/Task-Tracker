@@ -1,25 +1,24 @@
 import React from 'react';
 import { ViewMode } from '../types/hrTask';
 import { ThemeMode } from '../utils/theme';
+import taskTrackerLogo from '@/Image/logo/Task Tracker logo.png';
 import { 
   Plus, 
   Upload, 
   Download, 
-  FileSpreadsheet, 
   CheckSquare, 
   Kanban, 
   Calendar as CalendarIcon, 
   BarChart3, 
-  BookOpen,
-  BellRing,
-  LayoutDashboard,
-  Settings as SettingsIcon,
-  Sun,
-  Moon,
-  Power,
-  FileText,
-  Database,
-  RefreshCw
+  BookOpen, 
+  BellRing, 
+  LayoutDashboard, 
+  Settings as SettingsIcon, 
+  Power, 
+  FileText, 
+  Database, 
+  RefreshCw, 
+  ArrowLeft 
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -77,8 +76,12 @@ export const Header: React.FC<HeaderProps> = ({
           
           {/* Brand & Greeting Zone */}
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-slate-900 dark:bg-indigo-600 text-white flex items-center justify-center shadow-xs font-bold text-sm tracking-tight shrink-0">
-              HR
+            <div className="w-9 h-9 rounded-xl overflow-hidden bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700/80 shadow-xs flex items-center justify-center shrink-0">
+              <img
+                src={taskTrackerLogo}
+                alt="Task Tracker Logo"
+                className="w-full h-full object-cover"
+              />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -102,31 +105,17 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* Action Buttons Zone + Theme Toggle - Single Line */}
+          {/* Action Buttons Zone - Single Line */}
           <div className="flex items-center flex-nowrap gap-1.5 sm:gap-2 shrink-0 overflow-x-auto max-w-full">
             
-            {/* Quick Theme Toggle Button */}
+            {/* Add Task Primary Action */}
             <button
-              onClick={onToggleTheme}
-              title={`Switch to ${currentTheme === 'dark' ? 'Light' : 'Dark'} mode`}
-              aria-label="Toggle theme"
-              className="p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer shrink-0"
+              onClick={onOpenAddTask}
+              className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 text-xs font-semibold text-white bg-slate-900 dark:bg-indigo-600 rounded-lg hover:bg-slate-800 dark:hover:bg-indigo-700 shadow-xs transition-colors cursor-pointer shrink-0 whitespace-nowrap"
             >
-              {currentTheme === 'dark' ? (
-                <Sun className="w-4 h-4 text-amber-400" />
-              ) : (
-                <Moon className="w-4 h-4 text-slate-600" />
-              )}
-            </button>
-
-            {/* Template Button */}
-            <button
-              onClick={onDownloadTemplate}
-              title="Download Excel template with Tasks & Notes sheets (.xlsx)"
-              aria-label="Download Excel Template"
-              className="p-2 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/70 transition-colors cursor-pointer shrink-0"
-            >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <Plus className="w-4 h-4" />
+              <span>Add Task</span>
+              <kbd className="hidden sm:inline-block ml-1 px-1.5 py-0.2 text-[10px] bg-slate-800 dark:bg-indigo-700 text-slate-300 rounded font-mono">N</kbd>
             </button>
 
             {/* Import Button */}
@@ -176,16 +165,6 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
-            {/* Add Task Primary Action */}
-            <button
-              onClick={onOpenAddTask}
-              className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 text-xs font-semibold text-white bg-slate-900 dark:bg-indigo-600 rounded-lg hover:bg-slate-800 dark:hover:bg-indigo-700 shadow-xs transition-colors cursor-pointer shrink-0 whitespace-nowrap"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Task</span>
-              <kbd className="hidden sm:inline-block ml-1 px-1.5 py-0.2 text-[10px] bg-slate-800 dark:bg-indigo-700 text-slate-300 rounded font-mono">N</kbd>
-            </button>
-
             {/* Close Website Button */}
             {onCloseWebsite && (
               <button
@@ -197,6 +176,30 @@ export const Header: React.FC<HeaderProps> = ({
                 <Power className="w-4 h-4" />
               </button>
             )}
+
+            {/* Back to Vignesh HR Portal Button */}
+            <a
+              href="https://www.vigneshhr.online"
+              target="_top"
+              rel="noopener noreferrer"
+              onClick={(e) => {
+                try {
+                  if (window.top) {
+                    window.top.location.href = 'https://www.vigneshhr.online';
+                  } else {
+                    window.location.href = 'https://www.vigneshhr.online';
+                  }
+                } catch {
+                  window.location.href = 'https://www.vigneshhr.online';
+                }
+              }}
+              title="Back to www.Vigneshhr.online"
+              aria-label="Back to www.Vigneshhr.online"
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer shrink-0 shadow-2xs"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 text-slate-600 dark:text-slate-300" />
+              <span>Back</span>
+            </a>
           </div>
         </div>
 
